@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Browser from '../utils/browser'
 
 export default function Home() {
   return (
@@ -108,6 +109,13 @@ export default function Home() {
           </p>
         </a>
       </div>
+      <div className="flex w-4/5 mx-auto">
+        <Browser
+          url="https://flowbite.com/tools/tailwind-cheat-sheet/"
+          theme='light'>
+        </Browser>
+      </div>
+
     </main>
   );
 }
