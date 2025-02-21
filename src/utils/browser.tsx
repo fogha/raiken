@@ -1,20 +1,29 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import '../styles/browser.css';
 
 interface props {
   theme: string,
   url: string,
+  className?: string
 }
 
-const Browser = ({ url, theme }: props) => {
-  const [currentUrl, setCurrentUrl] = useState(url || "/");
-
+const Browser = ({ url, theme, className }: props) => {
+  const [currentUrl, setCurrentUrl] = useState(url || "http://localhost:3001");
+  const iframeRef = useRef();
   const PARENT_CONTAINER = "browser-in-browser-poiuytrewasdfghj";
   const IFRAME_ID = "browser-in-browser-mokmijnuhb";
   const URL_HEADING_ID = "browser-in-browser-zdrtxcgyvhu";
   const themeClass = theme === 'dark' ? 'dark' : 'light';
 
+  useEffect(() => {
+    window.addEventListener(
+      "message",
+      function (e) {
+        console.log(e);
+      },
+    );
+  }, [])
   // @ts-ignore
   const iframeWindow = () => document.getElementById(IFRAME_ID).contentWindow;
 
@@ -37,12 +46,22 @@ const Browser = ({ url, theme }: props) => {
   }
 
   const reload = () => {
-    console.log(currentUrl)
-    // iframeWindow().location.href.reload();
-    let iframe = document.getElementById(IFRAME_ID);
-    // @ts-ignore
-    iframe.src = currentUrl
+    const iframe = document.getElementById(IFRAME_ID) as HTMLIFrameElement;
+    if (iframe) {
+      iframe.src = currentUrl;
+      iframe.onload = () => {
+        if (iframe.contentWindow) {
+          // Enable same-origin access
+          iframe.contentWindow.document.domain = 'localhost';
+        }
+      };
+    }
   }
+  const myFunctions = {
+    soundAlert: (message) => {
+      alert(`This alert message was fired from inside the iframe:  ${message}`);
+    },
+  };
 
   const contentWindowClickHandler = () => setTimeout(setUrlInHeader, 5);
 
@@ -59,8 +78,16 @@ const Browser = ({ url, theme }: props) => {
     document?.getElementById(IFRAME_ID).contentDocument.body.addEventListener('click', contentWindowClickHandler);
   }
 
+  console.log(iframeRef?.current, document.getElementById(IFRAME_ID))
+  useEffect(() => {
+    const iframe = document.getElementById(IFRAME_ID) as HTMLIFrameElement;
+    if (iframe) {
+      iframe.src = currentUrl;
+    }
+  }, [currentUrl]);
+
   return (
-    <div id={PARENT_CONTAINER} className="container">
+    <div id={PARENT_CONTAINER} className={`${className}`}>
       <div className={`header ${themeClass}`}>
         <button onClick={() => back()} className='btn al-itm-c mr-rt-4 fs-18 centralize'>
           <svg width="18" height="18" viewBox="-8 -20 100 100" fill="none">
@@ -90,9 +117,12 @@ const Browser = ({ url, theme }: props) => {
       </div>
       <iframe
         id={IFRAME_ID}
+        ref={iframeRef}
         title="editor"
         src={currentUrl}
         loading='lazy'
+        allow="fullscreen"
+        sandbox="allow-scripts"
         width="100%"
         onLoad={onFrameLoad}
         className="windowFrame"
