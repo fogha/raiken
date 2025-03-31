@@ -25,3 +25,18 @@ export interface TestSuite {
   description: string;
   cases: TestCase[];
 }
+
+export interface TestGenerationPrompt {
+  description: string;
+  requirements?: string[];
+  expectations?: string[];
+  url?: string;
+  target?: string; // Target URL for the test
+  additionalContext?: string; // Additional context like JSON test script
+}
+
+export interface TestGenerationResult {
+  success: boolean;
+  code?: string;
+  error?: string;
+}

@@ -20,6 +20,10 @@ export interface TestConfig {
     timeout: number;
     retries: number;
   };
+  api: {
+    openaiKey?: string;
+    openaiModel?: string;
+  };
   storage: {
     location: 'local' | 'remote';
     path: string;
@@ -47,6 +51,11 @@ export const defaultConfig: TestConfig = {
     },
     timeout: 30000,
     retries: 1,
+  },
+  api: {
+    // Load the API key from environment variables if available
+    openaiKey: typeof process !== 'undefined' && process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY : '',
+    openaiModel: 'gpt-4',
   },
   storage: {
     location: 'local',

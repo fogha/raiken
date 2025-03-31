@@ -1,44 +1,52 @@
 "use client"
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Layout, PanelLeftClose, PanelLeft } from "lucide-react";
-import { Button } from "./ui/button";
-import { cn } from "@/lib/utils";
+import { Button } from "../ui/button";
+import { cn } from "@/core/common/utils";
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
-interface DOMNode {
-  tagName: string;
-  id: string;
-  className: string;
-  textContent: string;
-  type: string;
-  children: DOMNode[];
-}
+import { DOMNode } from '@/types/dom';
 
 interface SideBarProps {
-  onNodeSelect: (node: DOMNode) => void;
+  onNodeSelect: (node: Element | DOMNode) => void;
 }
 
 const TreeNode = ({ node, depth = 0, onSelect }: { 
   node: DOMNode; 
   depth?: number;
-  onSelect: (node: DOMNode) => void;
+  onSelect: (node: Element | DOMNode) => void;
 }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  const hasChildren = node.children.length > 0;
+  const hasChildren = node.children && node.children.length > 0;
 
   const highlightElement = () => {
-    const iframe = document.querySelector('iframe') as HTMLIFrameElement;
-    if (!iframe?.contentWindow) return;
-
-    iframe.contentWindow.postMessage({
+    // Find all iframes in the document (including ones inside SimpleBrowser)
+    const iframes = document.querySelectorAll('iframe');
+    
+    // Message to send to highlight the element
+    const message = {
       type: 'HIGHLIGHT_ELEMENT',
       payload: {
         tagName: node.tagName,
         id: node.id,
         className: node.className
       }
-    }, '*');
+    };
+    
+    // Send to all iframes to ensure it reaches the correct one
+    iframes.forEach(iframe => {
+      if (iframe?.contentWindow) {
+        try {
+          iframe.contentWindow.postMessage(message, '*');
+        } catch (e) {
+          console.error('[Arten] Error sending highlight message:', e);
+        }
+      }
+    });
+    
+    // Also dispatch a custom event that SimpleBrowser can listen for
+    window.dispatchEvent(new CustomEvent('arten:highlight-element', { detail: message.payload }));
   };
 
   const clearHighlight = () => {
@@ -56,6 +64,8 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
         className="flex items-center py-1 hover:bg-accent cursor-pointer"
         style={{ paddingLeft: `${depth * 12}px` }}
         onClick={() => {
+          // Since we're working with our custom DOMNode type here
+          // and not a real DOM Element, pass it directly
           onSelect(node);
           highlightElement();
         }}
@@ -102,14 +112,29 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
+    // Listen for direct postMessage events (original method)
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'DOM_TREE_UPDATE') {
+        console.log('[SideBar] Received DOM tree via postMessage');
         setDomTree(event.data.payload);
       }
     };
+    
+    // Listen for custom events from SimpleBrowser (new method)
+    const handleCustomEvent = (event: CustomEvent) => {
+      console.log('[SideBar] Received DOM tree via custom event');
+      setDomTree(event.detail);
+    };
 
+    // Add both event listeners
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
+    
+    // Clean up both event listeners
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
+    };
   }, []);
 
   return (

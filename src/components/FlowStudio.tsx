@@ -13,20 +13,20 @@ import ReactFlow, {
   applyNodeChanges,
   applyEdgeChanges,
 } from 'reactflow';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Textarea } from './ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { Plus, Play, Save } from 'lucide-react';
 import type { FlowNode, FlowEdge, TestFlow, TestResult } from '@/types/flow';
 import 'reactflow/dist/style.css';
 
 // Custom node types
-import ActionNode from './flow/ActionNode';
-import ConditionNode from './flow/ConditionNode';
-import AssertionNode from './flow/AssertionNode';
-import InputNode from './flow/InputNode';
-import WaitNode from './flow/WaitNode';
+import ActionNode from '../flow/ActionNode';
+import ConditionNode from '../flow/ConditionNode';
+import AssertionNode from '../flow/AssertionNode';
+import InputNode from '../flow/InputNode';
+import WaitNode from '../flow/WaitNode';
 
 const nodeTypes = {
   action: ActionNode,
@@ -36,9 +36,12 @@ const nodeTypes = {
   wait: WaitNode
 };
 
+import { DOMNode } from '@/types/dom';
+import { isDOMNode } from '@/core/dom/domUtils';
+
 interface FlowStudioProps {
-  selectedNode: Element | null;
-  onRunFlow: (flow: TestFlow) => Promise<void>;
+  selectedNode: Element | DOMNode | null;
+  onRunFlow?: (flow: TestFlow) => Promise<void>;
 }
 
 export const FlowStudio = ({ selectedNode, onRunFlow }: FlowStudioProps) => {
@@ -83,20 +86,39 @@ export const FlowStudio = ({ selectedNode, onRunFlow }: FlowStudioProps) => {
     setNodes((nds) => [...nds, newNode]);
   }, [selectedNode]);
 
-  const generateSelector = (element: Element): string => {
-    if (element.id) return `#${element.id}`;
+  const generateSelector = (element: Element | DOMNode): string => {
+    // Check if this is a DOMNode or an Element
+    const isDomNodeObj = isDOMNode(element);
     
-    let selector = element.tagName.toLowerCase();
-    if (element.className) {
-      selector += `.${element.className.split(' ').join('.')}`;
+    // Handle id
+    if (isDomNodeObj) {
+      if (element.id) return `#${element.id}`;
+    } else {
+      if ((element as Element).id) return `#${(element as Element).id}`;
     }
     
-    // Add nth-child if needed
-    const parent = element.parentElement;
-    if (parent) {
-      const siblings = Array.from(parent.children);
-      const index = siblings.indexOf(element) + 1;
-      selector += `:nth-child(${index})`;
+    // Get tagName
+    let selector = element.tagName.toLowerCase();
+    
+    // Handle className
+    if (isDomNodeObj) {
+      if (element.className) {
+        selector += `.${element.className.split(' ').join('.')}`;
+      }
+    } else {
+      const el = element as Element;
+      const className = typeof el.className === 'string' ? el.className : (el.className as any)?.baseVal || '';
+      if (className) {
+        selector += `.${className.split(' ').join('.')}`;
+      }
+      
+      // Add nth-child if needed (only for actual DOM elements)
+      const parent = el.parentElement;
+      if (parent) {
+        const siblings = Array.from(parent.children);
+        const index = siblings.indexOf(el) + 1;
+        selector += `:nth-child(${index})`;
+      }
     }
     
     return selector;
@@ -147,9 +169,13 @@ export const FlowStudio = ({ selectedNode, onRunFlow }: FlowStudioProps) => {
     setTestResults([]);
 
     try {
-      await onRunFlow(flow);
+      if (onRunFlow) {
+        await onRunFlow(flow);
+      } else {
+        console.warn('No onRunFlow handler provided');
+      }
     } catch (error) {
-      // Handle error
+      console.error('Error running flow:', error);
     } finally {
       setIsRunning(false);
     }

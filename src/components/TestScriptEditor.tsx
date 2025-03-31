@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useRef, useEffect } from 'react';
-import { Card } from "./ui/card";
-import { Label } from "./ui/label";
-import { cn } from "@/lib/utils";
+import { Card } from "../ui/card";
+import { Label } from "../ui/label";
+import { cn } from "@/core/common/utils";
 
 interface TestScriptEditorProps {
   value: string;

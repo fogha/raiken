@@ -1,0 +1,59 @@
+{
+  "type": "ui-test",
+  "name": "Arten Examples App Test",
+  "description": "Basic test for the Arten Examples application",
+  "steps": [
+    {
+      "action": "navigate",
+      "url": "http://localhost:3002"
+    },
+    {
+      "action": "wait",
+      "ms": 2000
+    },
+    {
+      "action": "click",
+      "element": "button"
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    },
+    {
+      "action": "click",
+      "element": "a"
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    },
+    {
+      "action": "type",
+      "element": "input",
+      "value": "test input"
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    }
+  ],
+  "assertions": [
+    {
+      "type": "element",
+      "selector": "h1",
+      "condition": "visible",
+      "timeout": 3000
+    },
+    {
+      "type": "element",
+      "selector": "body",
+      "condition": "contains",
+      "value": "Arten",
+      "timeout": 3000
+    },
+    {
+      "type": "url",
+      "contains": "localhost:3002"
+    }
+  ]
+}

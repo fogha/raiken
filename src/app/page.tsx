@@ -2,7 +2,7 @@ import dynamic from 'next/dynamic';
 
 // Use dynamic import to avoid SSR issues with iframe manipulation
 const ProjectViewer = dynamic(
-  () => import('../components/ProjectViewer'),
+  () => import('../components/layout/ProjectViewer'),
   { ssr: false }
 );
 
