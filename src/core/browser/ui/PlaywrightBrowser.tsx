@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Play, Code2, Settings } from 'lucide-react';
 import { DOMNode } from '@/types/dom';
 import { TabbedTestEditor } from '@/core/testing/ui/TabbedTestEditor';
+// Using local state only for browser, DOM, and testing functionality
 
 interface PlaywrightBrowserProps {
   initialUrl?: string;
@@ -40,36 +41,56 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   onTestResultUpdate,
   generatedTest: initialGeneratedTest = '' // Rename parameter to avoid collision
 }) => {
-  // Global test configuration state - loading from localStorage if available
-  const [globalTestConfig, setGlobalTestConfig] = useState<{
-    headless: boolean;
-    browserType: 'chromium' | 'firefox' | 'webkit';
-  }>({ headless: true, browserType: 'chromium' });
-  
-  // Load settings from localStorage on initial render
-  useEffect(() => {
-    try {
-      const savedConfig = localStorage.getItem('artenTestConfig');
-      if (savedConfig) {
-        setGlobalTestConfig(JSON.parse(savedConfig));
-      }
-    } catch (error) {
-      console.error('Error loading saved configuration:', error);
-    }
-  }, []);
-  const [url, setUrl] = useState<string>(initialUrl);
-  const [inputUrl, setInputUrl] = useState<string>(initialUrl);
+  // Local React state instead of Zustand store
+  // Browser state
+  const [storeUrl, setStoreUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isBrowserLaunched, setIsBrowserLaunched] = useState<boolean>(false);
-  const [domTree, setDomTree] = useState<DOMNode | null>(null);
-  const [selectedElement, setSelectedElement] = useState<DOMNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   
-  // Test-related state
-  const [generatedTest, setGeneratedTest] = useState<string>(initialGeneratedTest);
-  const [testResult, setTestResult] = useState<any>(null);
+  // DOM state
+  const [domTree, setDOMTree] = useState<DOMNode | null>(null);
+  const [selectedElement, setSelectedElement] = useState<DOMNode | null>(null);
+  
+  // Testing state
+  const [generatedTest, setGeneratedTest] = useState<string>(initialGeneratedTest || '');
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [isTestRunning, setIsTestRunning] = useState<boolean>(false);
+  const [testResult, setTestResult] = useState<any[]>([]);
+  
+  // Settings state
+  const [globalConfig, setGlobalConfig] = useState<{
+    headless: boolean;
+    browserType: 'chromium' | 'firefox' | 'webkit';
+  }>({
+    headless: true,
+    browserType: 'chromium'
+  });
+  
+  // Helper function to reset browser state
+  const resetBrowser = () => {
+    setStoreUrl(null);
+    setIsLoading(false);
+    setIsBrowserLaunched(false);
+    setError(null);
+  };
+  
+  // Local state that doesn't need to be in the global store
+  const [inputUrl, setInputUrl] = useState<string>(initialUrl);
   const [showTestEditor, setShowTestEditor] = useState<boolean>(false);
+  
+  // Set URL from props initially if provided - only on first mount, not on re-renders
+  useEffect(() => {
+    if (initialUrl && initialUrl !== '') {
+      // Important: Only set the store URL if it's not already set
+      // This prevents circular updates between the store and component
+      setStoreUrl(initialUrl);
+      setInputUrl(initialUrl);
+    }
+  }, []); // Empty dependency array = only run on mount
+  
+  // Use the store URL or fallback to the initialUrl prop
+  const url = storeUrl || initialUrl;
 
   // Add iframeRef for browser display
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -93,19 +114,25 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     };
   }, []);
 
-  // Update local state when the prop changes
+  // Update local state when the prop changes - but only on first mount, not on re-renders
   useEffect(() => {
     if (initialGeneratedTest && initialGeneratedTest !== '') {
-      console.log('[Arten] PlaywrightBrowser received new test script via props');
+      console.log('[Arten] PlaywrightBrowser received initial test script via props');
       setGeneratedTest(initialGeneratedTest);
     }
-  }, [initialGeneratedTest]); // Watch initialGeneratedTest (the prop) not the state
+  }, []); // Empty dependency array = only run on mount
 
   useEffect(() => {
-    // Attempt to initialize browser on component mount
+    // Attempt to initialize browser on component mount, but only if not already launched
     const initBrowser = async () => {
+      // Prevent multiple initializations
+      if (isBrowserLaunched) {
+        console.log('[Arten] Browser already launched, skipping initialization');
+        return;
+      }
+
       try {
-        console.log('Initializing browser on component mount...');
+        console.log('[Arten] Initializing browser on component mount...');
         const response = await fetch('/api/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -114,18 +141,22 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         
         const data = await response.json();
         if (data.success) {
-          console.log('Browser initialized successfully on mount');
+          console.log('[Arten] Browser initialized successfully on mount');
           setIsBrowserLaunched(true);
         } else {
-          console.error('Browser initialization failed:', data.error);
+          console.error('[Arten] Browser initialization failed:', data.error);
         }
       } catch (error) {
-        console.error('Error initializing browser:', error);
+        console.error('[Arten] Error initializing browser:', error);
       }
     };
     
-    // Initialize browser on mount
-    initBrowser();
+    // Initialize browser on mount - with a small delay to prevent race conditions
+    const timer = setTimeout(() => {
+      initBrowser();
+    }, 100);
+    
+    return () => clearTimeout(timer);
     
     // Clean up when component unmounts
     return () => {
@@ -187,7 +218,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       }
       
       console.log('Navigation successful');
-      setUrl(inputUrl);
+      setStoreUrl(inputUrl);
       
       // Extract DOM tree
       console.log('Extracting DOM tree...');
@@ -221,7 +252,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         throw new Error(data.error || 'Failed to extract DOM');
       }
       
-      setDomTree(data.domTree);
+      setDOMTree(data.domTree);
       
       if (onDOMTreeUpdate) {
         onDOMTreeUpdate(data.domTree);
@@ -295,9 +326,14 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       return;
     }
 
-    // Update UI state to indicate test is running
-    setIsTestRunning(true);
-    setTestResult(null);
+    // IMPORTANT: Create local variables to track state during execution
+    // This ensures we only update state once at the end of the process
+    const localIsRunning = true;
+    const localTestResults: any[] = [];
+    
+    // Update UI state just once at the beginning
+    setIsTestRunning(localIsRunning);
+    setTestResult(localTestResults);
     setError(null);
     
     try {
@@ -335,21 +371,26 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       // Handle successful test execution
       console.log('[Arten] Test execution successful, updating UI with results');
-      setTestResult(data.result);
+      // Store result in local variable first to avoid multiple store updates
+      const finalResults = data.result;
+      
+      // Update state with final test results
+      setTestResult(finalResults);
       
       // Notify parent component if callback provided
       if (onTestResultUpdate) {
-        onTestResultUpdate(data.result);
+        onTestResultUpdate(finalResults);
       }
     } catch (err: any) {
       // Handle and display errors
       console.error('[Arten] Error running test:', err);
       setError(err?.message || 'Failed to run test');
-      setTestResult({ 
+      // Set test result as an array with a single error result
+      setTestResult([{ 
         success: false, 
         error: err?.message,
         timestamp: new Date().toISOString()
-      });
+      }]);
     } finally {
       // Always reset loading state when done
       setIsTestRunning(false);
@@ -366,7 +407,12 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     console.log('[Arten] Current URL:', url);
     console.log('[Arten] Selected element:', selectedElement);
     
-    setIsTestRunning(true);
+    // Use local variables to track state changes during function execution
+    // This helps prevent excessive re-renders
+    const isRunning = true;
+    
+    // Only update state once at the beginning
+    setIsTestRunning(isRunning);
     setError(null);
     
     try {
@@ -432,15 +478,15 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       <Card className="w-full h-full overflow-hidden rounded-none border-none flex flex-col" style={{ height, width }}>
         <CardContent className="flex-1 p-0 relative">
           {/* URL input and controls */}
-          <div className="p-4 border-b">
-            <form onSubmit={handleLoadUrl} className="flex gap-2">
+          <div className="h-12">
+            <form onSubmit={handleLoadUrl} className="flex gap-2 py-2 px-4">
               <Input
                 value={inputUrl}
                 onChange={(e) => setInputUrl(e.target.value)}
                 placeholder="Enter URL (e.g., http://localhost:8000)"
-                className="flex-1"
+                className="flex-1 h-8"
               />
-              <Button type="submit" disabled={isLoading} className="whitespace-nowrap">
+              <Button type="submit" disabled={isLoading} className="whitespace-nowrap h-8">
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -459,18 +505,22 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
               <div className="p-4 text-destructive">{error}</div>
             ) : !isBrowserLaunched ? (
               <div className="flex items-center justify-center w-full p-4 text-center text-muted-foreground">
-                Enter a URL and click "Load URL" to begin
+                Enter a URL to begin
               </div>
             ) : (
               <div className="w-full h-full">
                 <Tabs defaultValue="browser" className="w-full h-full flex flex-col">
                   {/* Tab header */}
-                  <div className="p-2 border-b flex justify-between items-center">
-                    <TabsList>
-                      <TabsTrigger value="browser">Web Page View</TabsTrigger>
-                      <TabsTrigger value="tests">Test Scripts</TabsTrigger>
+                  <div className="bg-muted h-10 flex items-center px-3 relative">
+                    <TabsList className="flex gap-2 h-full border-0 bg-transparent p-0">
+                      <TabsTrigger value="browser" className="shadow-none px-3 h-full text-sm flex items-center rounded-none border-b-0 data-[state=active]:border-b-[3px] data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=inactive]:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0 hover:outline-none hover:ring-0 data-[state=active]:bg-transparent relative z-10">
+                        Web Page View
+                      </TabsTrigger>
+                      <TabsTrigger value="tests" className="shadow-none px-3 h-full text-sm flex items-center rounded-none border-b-0 data-[state=active]:border-b-[3px] data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=inactive]:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0 hover:outline-none hover:ring-0 data-[state=active]:bg-transparent relative z-10">
+                        Test Scripts
+                      </TabsTrigger>
                     </TabsList>
-                
+                    <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-border"></div>
                   </div>
 
                   {/* Tab content panels */}
@@ -490,36 +540,32 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
                       />
                     ) : (
                       <div className="p-4 text-center text-muted-foreground">
-                        Enter a URL and click "Load URL" to view the page
+                        Enter a URL in the field above to begin
                       </div>
                     )}
                   </TabsContent>
 
-                  <TabsContent value="tests" className="flex-1 overflow-auto p-4 pt-0">
+                  <TabsContent value="tests" className="flex-1 overflow-auto p-6">
                     {/* TabbedTestEditor for multiple test scripts */}
                     <TabbedTestEditor
                       onRunTest={handleRunTest}
                       onCloseTab={handleCloseTab}
                       initialScript={generatedTest}
-                      globalConfig={globalTestConfig}
+                      globalConfig={globalConfig}
                     />
                     
-                    {testResult && (
-                      <div className="h-64 border-t p-4 overflow-auto mt-4">
+                    {testResult && testResult.length > 0 && (
+                      <div className="h-64 border-t p-4 overflow-auto mt-6">
                         <h4 className="font-medium mb-2">Test Results</h4>
-                        <div className={`p-3 rounded ${testResult.success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {testResult.success ? (
-                            <p>Test passed successfully!</p>
-                          ) : (
-                            <p>Test failed: {testResult.error}</p>
-                          )}
-                        </div>
-                        <div className="mt-4">
-                          <JSONTree 
-                            data={testResult} 
-                            hideRoot={false}
-                          />
-                        </div>
+                        {testResult.map((result, index) => (
+                          <div key={index} className={`p-3 rounded my-1 ${result.success ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'}`}>
+                            {result.success ? (
+                              <p>Test passed successfully!</p>
+                            ) : (
+                              <p>Test failed: {result.error || 'Unknown error'}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                   </TabsContent>

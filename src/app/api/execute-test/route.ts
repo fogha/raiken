@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server';
-import { chromium } from 'playwright';
 import { getTestExecutor } from '@/core/testing';
 
+interface TestConfig {
+  headless: boolean;
+  browserType: 'chromium' | 'firefox' | 'webkit';
+  timeout?: number;
+}
 
 export async function POST(req: Request) {
   try {
@@ -16,42 +20,50 @@ export async function POST(req: Request) {
       );
     }
     
-    // Update the config with the API key from environment
-    if (config?.api) {
-      config.api.openaiKey = apiKey;
-    }
-
-    const browser = await chromium.launch({
-      headless: config.execution.mode === 'service'
+    // Prepare the browser configuration
+    const testConfig: TestConfig = {
+      headless: config?.headless !== undefined ? config.headless : true,
+      browserType: config?.browserType || 'chromium',
+      timeout: config?.timeout || 30000
+    };
+    
+    // Configure the Playwright environment variables based on the browser type
+    process.env.PLAYWRIGHT_BROWSER = testConfig.browserType;
+    process.env.PLAYWRIGHT_HEADLESS = testConfig.headless ? 'true' : 'false';
+    
+    console.log(`[Arten] Executing test with config:`, {
+      browserType: testConfig.browserType,
+      headless: testConfig.headless,
+      timeout: testConfig.timeout
     });
     
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    
-    // Execute test and collect results
-    const results: any[] = [];
-    let error = null;
-
     try {
-      // Create a test executor with the API key
+      // Create a test executor with the API key and configuration
       const executor = getTestExecutor({
         apiKey,
-        timeout: config?.playwright?.timeout || 30000,
+        timeout: testConfig.timeout,
         outputDir: './test-results'
       });
       
-      // Execute the test
+      // Execute the test with the provided script
       const testResults = await executor.runTest(script);
+      
+      console.log(`[Arten] Test execution completed with ${testResults.results.length} results`);
+      
+      // Return the test results
       return NextResponse.json(testResults);
-    } catch (e) {
-      error = e;
+    } catch (error) {
+      console.error('[Arten] Error in test execution:', error);
+      return NextResponse.json({ 
+        results: [],
+        error: error instanceof Error ? error.message : String(error)
+      }, { status: 500 });
     }
-
-    await context.close();
-    await browser.close();
-
-    return NextResponse.json({ results, error });
   } catch (error) {
-    return NextResponse.json({ error: 'Test execution failed' }, { status: 500 });
+    console.error('[Arten] API route error:', error);
+    return NextResponse.json({ 
+      error: 'Test execution failed',
+      details: error instanceof Error ? error.message : String(error)
+    }, { status: 500 });
   }
-} 
+}

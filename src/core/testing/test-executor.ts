@@ -118,39 +118,74 @@ export class TestExecutor {
   }
   
   /**
-   * Execute the test script
+   * Execute the test script with Playwright
    */
   async runTest(testScript: string): Promise<{ results: TestResult[], error?: Error }> {
     const startTime = Date.now();
     const results: TestResult[] = [];
     
+    // Create temporary test file
+    const tempFilePath = path.join(this.config.outputDir || './test-results', `temp-test-${Date.now()}.js`);
+    
     try {
-      // In a full implementation, this would execute the Playwright test
-      // For now, we'll simulate test execution
+      // Ensure the output directory exists
+      if (!fs.existsSync(this.config.outputDir || './test-results')) {
+        fs.mkdirSync(this.config.outputDir || './test-results', { recursive: true });
+      }
       
-      // Simulate test result
-      const result: TestResult = {
-        success: true,
-        message: 'Test executed successfully',
-        durationMs: Date.now() - startTime,
-        timestamp: new Date().toISOString(),
-        script: testScript
-      };
+      // Write test script to temporary file
+      fs.writeFileSync(tempFilePath, testScript);
+      console.log(`Test script written to ${tempFilePath}`);
       
-      results.push(result);
+      // Execute test using Node's child_process module
+      const { execSync } = require('child_process');
       
-      // Save results to file
+      try {
+        // Create a command to run the test with Playwright's CLI
+        // --timeout option adds a timeout in milliseconds
+        const command = `npx playwright test ${tempFilePath} --timeout=${this.config.timeout}`;
+        
+        console.log(`Executing command: ${command}`);
+        const output = execSync(command, { encoding: 'utf8' });
+        
+        // Create successful result
+        const result: TestResult = {
+          success: true,
+          message: 'Test executed successfully',
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+          script: testScript
+        };
+        
+        results.push(result);
+        console.log('Test execution output:', output);
+      } catch (execError) {
+        // If the test execution itself fails
+        // Type check and convert the unknown error to string
+        const errorOutput = execError instanceof Error ? execError.message : String(execError);
+        console.error('Test script execution failed:', errorOutput);
+        
+        results.push({
+          success: false,
+          message: `Test execution failed: ${errorOutput}`,
+          durationMs: Date.now() - startTime,
+          timestamp: new Date().toISOString(),
+          script: testScript
+        });
+      }
+      
+      // Save results to file regardless of success/failure
       const filePath = await this.saveResults(testScript, results);
       console.log(`Test results saved to ${filePath}`);
       
       return { results };
     } catch (error) {
-      console.error('Error running test:', error);
+      console.error('Error in test runner:', error);
       
-      // Add error result
+      // Add error result for runner errors
       results.push({
         success: false,
-        message: `Test execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `Test runner error: ${error instanceof Error ? error.message : String(error)}`,
         durationMs: Date.now() - startTime,
         timestamp: new Date().toISOString(),
         script: testScript
@@ -160,6 +195,16 @@ export class TestExecutor {
         results,
         error: error instanceof Error ? error : new Error(String(error))
       };
+    } finally {
+      // Clean up temporary test file
+      try {
+        if (fs.existsSync(tempFilePath)) {
+          fs.unlinkSync(tempFilePath);
+          console.log(`Temporary test file removed: ${tempFilePath}`);
+        }
+      } catch (cleanupError) {
+        console.error('Error cleaning up temporary test file:', cleanupError);
+      }
     }
   }
 }

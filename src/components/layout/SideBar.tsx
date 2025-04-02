@@ -7,6 +7,7 @@ import { cn } from "@/core/common/utils";
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
 import { DOMNode } from '@/types/dom';
+// Using local state instead of Zustand store
 
 interface SideBarProps {
   onNodeSelect: (node: Element | DOMNode) => void;
@@ -17,7 +18,7 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
   depth?: number;
   onSelect: (node: Element | DOMNode) => void;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(depth < 2); // Only expand first two levels by default
   const hasChildren = node.children && node.children.length > 0;
 
   const highlightElement = () => {
@@ -61,11 +62,12 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
   return (
     <div>
       <div 
-        className="flex items-center py-1 hover:bg-accent cursor-pointer"
-        style={{ paddingLeft: `${depth * 12}px` }}
+        className={cn(
+          "flex items-center py-1.5 px-1 rounded-sm cursor-pointer text-sm transition-colors",
+          "hover:bg-accent/50"
+        )}
+        style={{ paddingLeft: `${depth * 10}px` }}
         onClick={() => {
-          // Since we're working with our custom DOMNode type here
-          // and not a real DOM Element, pass it directly
           onSelect(node);
           highlightElement();
         }}
@@ -78,16 +80,17 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
               e.stopPropagation();
               setIsExpanded(!isExpanded);
             }}
-            className="mr-1"
+            className="mr-1 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label={isExpanded ? "Collapse node" : "Expand node"}
           >
-            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </button>
         )}
-        <span className="text-sm">
-          {node.tagName}
-          {node.id && <span className="text-blue-500 ml-1">#{node.id}</span>}
+        <span className="font-mono text-xs">
+          <span className="text-orange-500 dark:text-orange-400">{node.tagName.toLowerCase()}</span>
+          {node.id && <span className="text-blue-500 dark:text-blue-400 ml-1">#{node.id}</span>}
           {node.className && (
-            <span className="text-green-500 ml-1">.{node.className}</span>
+            <span className="text-emerald-600 dark:text-emerald-400 ml-1">.{node.className.split(' ')[0]}{node.className.split(' ').length > 1 && '...'}</span>
           )}
         </span>
       </div>
@@ -108,7 +111,9 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
 };
 
 const SideBar = ({ onNodeSelect }: SideBarProps) => {
-  const [domTree, setDomTree] = useState<DOMNode | null>(null);
+  // Local state for DOM tree instead of Zustand store
+  const [domTree, setDOMTree] = useState<DOMNode | null>(null);
+  // Keep local UI state
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   useEffect(() => {
@@ -116,14 +121,14 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'DOM_TREE_UPDATE') {
         console.log('[SideBar] Received DOM tree via postMessage');
-        setDomTree(event.data.payload);
+        setDOMTree(event.data.payload);
       }
     };
     
     // Listen for custom events from SimpleBrowser (new method)
     const handleCustomEvent = (event: CustomEvent) => {
       console.log('[SideBar] Received DOM tree via custom event');
-      setDomTree(event.detail);
+      setDOMTree(event.detail);
     };
 
     // Add both event listeners
@@ -135,50 +140,49 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
     };
-  }, []);
+  }, [setDOMTree]); // Include setDOMTree in dependencies
 
   return (
     <div className={cn(
-      "transition-all duration-300 ease-in-out",
-      isCollapsed ? "w-12" : "w-[320px]"
+      "transition-all duration-300 ease-in-out h-full",
+      isCollapsed ? "w-10" : "w-[280px]"
     )}>
-      <Card className="h-full relative">
+      <div className="h-full bg-background/60 backdrop-blur-sm flex flex-col relative">
         <Button
           variant="ghost"
           size="icon"
-          className="absolute right-2 top-2 z-10"
+          className="absolute right-0.5 top-0.5 z-10 h-5 w-5 opacity-60 hover:opacity-100 text-muted-foreground hover:bg-transparent"
           onClick={() => setIsCollapsed(!isCollapsed)}
         >
-          {isCollapsed ? <PanelLeft size={16} /> : <PanelLeftClose size={16} />}
+          {isCollapsed ? <PanelLeft size={12} /> : <PanelLeftClose size={12} />}
         </Button>
         
         {!isCollapsed && (
           <>
-            <CardHeader className="pb-2">
-              <CardTitle>Arten</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-auto h-[calc(100vh-8rem)] p-4 relative">
+            <div className="pt-2 pb-1 px-2"></div>
+            
+            <div className="flex-1 overflow-auto pt-1">
+              <div className="px-1 h-full">
                 {domTree ? (
-                  <div className="min-w-[800px]">
+                  <div className="overflow-x-auto">
                     <TreeNode node={domTree} onSelect={onNodeSelect} />
                   </div>
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 text-center">
-                    <Layout className="h-12 w-12 text-muted-foreground/50" />
+                  <div className="h-full flex flex-col items-center justify-center gap-3 text-center p-4">
+                    <Layout className="h-8 w-8 text-muted-foreground/20" />
                     <div>
-                      <h3 className="text-lg font-semibold mb-2">No DOM Tree Available</h3>
-                      <p className="text-sm text-muted-foreground max-w-[220px]">
-                        Enter a URL above and click "Load Project" to analyze the DOM structure.
+                      <h3 className="text-xs font-medium mb-1 text-muted-foreground">No DOM Tree Available</h3>
+                      <p className="text-xs text-muted-foreground/70 max-w-[220px]">
+                        No page elements available yet.
                       </p>
                     </div>
                   </div>
                 )}
               </div>
-            </CardContent>
+            </div>
           </>
         )}
-      </Card>
+      </div>
     </div>
   );
 };
