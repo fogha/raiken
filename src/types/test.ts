@@ -40,3 +40,38 @@ export interface TestGenerationResult {
   code?: string;
   error?: string;
 }
+
+// Test configuration types
+export interface TestScriptConfig {
+  headless: boolean;
+  browserType: 'chromium' | 'firefox' | 'webkit';
+}
+
+// Test result types
+export interface TestResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  timestamp?: string;
+}
+
+// Test tab types
+export interface TestTab {
+  id: string;
+  name: string;
+  content: string;
+  language: 'typescript' | 'javascript' | 'json';
+  config: TestScriptConfig;
+  isRunning?: boolean;
+  results?: TestResult[];
+  error?: string;
+}
+
+// Component props types
+export interface TabbedTestEditorProps {
+  onRunTest: (scriptContent: string, scriptId: string, config: TestScriptConfig) => Promise<void>;
+  onCloseTab?: (tabId: string) => Promise<void>;
+  initialScript?: string;
+  globalConfig: TestScriptConfig;
+  onRef?: (ref: { addNewTab: (content: string, name: string) => string }) => void;
+}

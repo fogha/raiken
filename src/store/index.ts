@@ -1,13 +1,23 @@
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
-import { type AppState, type BrowserState, type DOMState, type TestingState, type SettingsState, type TestTab } from './types';
+import { type TestTab } from '@/types/test';
+import { type AppState, type DOMState, type TestingState, type SettingsState } from './types';
+import { type BrowserState, type ViewportState } from '@/types/browser';
+import { type StatusLevel } from '@/types/status';
 
 // Initial states
 const initialBrowserState: BrowserState = {
   url: null,
   isLoading: false,
-  isBrowserLaunched: false,
-  error: null
+  isLaunched: false,
+  viewport: {
+    width: 1024,
+    height: 768,
+    scale: 1,
+    isMobile: false
+  },
+  error: null,
+  status: null
 };
 
 const initialDOMState: DOMState = {
@@ -19,7 +29,8 @@ const initialTestingState: TestingState = {
   tabs: [],
   activeTabId: null,
   jsonTestScript: '',
-  testScript: '',
+  testScripts: [],
+  generatedTests: [],
   isGenerating: false,
   isRunning: false,
   showResults: false,
@@ -71,7 +82,7 @@ export const useAppStore = create<AppState>()(
         setUrl: (url: string | null) => {
           const state = get();
           if (!state._updatesEnabled) return;
-          if (state.browser.url === url) return; // Skip if unchanged
+          if (state.browser.url === url) return;
           
           set(state => ({
             browser: { ...state.browser, url }
@@ -80,19 +91,45 @@ export const useAppStore = create<AppState>()(
         setIsLoading: (isLoading: boolean) => {
           const state = get();
           if (!state._updatesEnabled) return;
-          if (state.browser.isLoading === isLoading) return; // Skip if unchanged
+          if (state.browser.isLoading === isLoading) return;
           
           set(state => ({
             browser: { ...state.browser, isLoading }
           }));
         },
-        setIsBrowserLaunched: (isBrowserLaunched: boolean) => {
+        setIsLaunched: (isLaunched: boolean) => {
           const state = get();
           if (!state._updatesEnabled) return;
-          if (state.browser.isBrowserLaunched === isBrowserLaunched) return; // Skip if unchanged
-          
           set(state => ({
-            browser: { ...state.browser, isBrowserLaunched }
+            browser: { ...state.browser, isLaunched }
+          }));
+        },
+        setViewport: (viewport: ViewportState) => {
+          const state = get();
+          if (!state._updatesEnabled) return;
+          set(state => ({
+            browser: { ...state.browser, viewport }
+          }));
+        },
+        setScale: (scale: number) => {
+          const state = get();
+          if (!state._updatesEnabled) return;
+          set(state => ({
+            browser: { ...state.browser, viewport: { ...state.browser.viewport, scale } }
+          }));
+        },
+        setIsMobile: (isMobile: boolean) => {
+          const state = get();
+          if (!state._updatesEnabled) return;
+          set(state => ({
+            browser: { ...state.browser, viewport: { ...state.browser.viewport, isMobile } }
+          }));
+        },
+        setStatus: (type: string, message: string, level: StatusLevel) => {
+          const state = get();
+          if (!state._updatesEnabled) return;
+          set(state => ({
+            browser: { ...state.browser, status: { type, message, level, timestamp: Date.now() } }
           }));
         },
         setBrowserError: (error: string | null) => {
@@ -154,8 +191,11 @@ export const useAppStore = create<AppState>()(
         setJsonTestScript: (jsonTestScript: string) => set(state => ({
           testing: { ...state.testing, jsonTestScript }
         })),
-        setTestScript: (testScript: string) => set(state => ({
-          testing: { ...state.testing, testScript }
+        addTestScript: (script: string) => set(state => ({
+          testing: { ...state.testing, testScripts: [...state.testing.testScripts, script] }
+        })),
+        addGeneratedTest: (script: string) => set(state => ({
+          testing: { ...state.testing, generatedTests: [...state.testing.generatedTests, script] }
         })),
         setIsGenerating: (isGenerating: boolean) => set(state => ({
           testing: { ...state.testing, isGenerating }
@@ -198,14 +238,16 @@ export const useBrowserStore = () => useAppStore(state => ({
   // State
   url: state.browser.url,
   isLoading: state.browser.isLoading,
-  isBrowserLaunched: state.browser.isBrowserLaunched,
+  isLaunched: state.browser.isLaunched,
   error: state.browser.error,
   // Actions
   setUrl: state.setUrl,
   setIsLoading: state.setIsLoading,
-  setIsBrowserLaunched: state.setIsBrowserLaunched,
-  setBrowserError: state.setBrowserError,
-  resetBrowser: state.resetBrowser
+  setIsLaunched: state.setIsLaunched,
+  setViewport: state.setViewport,
+  setScale: state.setScale,
+  setIsMobile: state.setIsMobile,
+  setStatus: state.setStatus
 }));
 
 export const useDOMStore = () => useAppStore(state => ({
@@ -222,7 +264,8 @@ export const useTestingStore = () => useAppStore(state => ({
   tabs: state.testing.tabs,
   activeTabId: state.testing.activeTabId,
   jsonTestScript: state.testing.jsonTestScript,
-  testScript: state.testing.testScript,
+  testScripts: state.testing.testScripts,
+  generatedTests: state.testing.generatedTests,
   isGenerating: state.testing.isGenerating,
   isRunning: state.testing.isRunning,
   showResults: state.testing.showResults,
@@ -235,7 +278,8 @@ export const useTestingStore = () => useAppStore(state => ({
   removeTab: state.removeTab,
   updateTab: state.updateTab,
   setJsonTestScript: state.setJsonTestScript,
-  setTestScript: state.setTestScript,
+  addTestScript: state.addTestScript,
+  addGeneratedTest: state.addGeneratedTest,
   setIsGenerating: state.setIsGenerating,
   setIsRunning: state.setIsRunning,
   setShowResults: state.setShowResults,

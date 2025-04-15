@@ -1,15 +1,15 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { JSONTree } from 'react-json-tree';
+import React, { useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Play, Code2, Settings } from 'lucide-react';
+import { Loader2, Play, Code2, Settings, FileText } from 'lucide-react';
 import { DOMNode } from '@/types/dom';
 import { TabbedTestEditor } from '@/core/testing/ui/TabbedTestEditor';
-// Using local state only for browser, DOM, and testing functionality
+import { TestReports } from '@/core/testing/ui/TestReports';
+import { SystemAction, useBrowserStore } from '@/store/browserStore';
 
 interface PlaywrightBrowserProps {
   initialUrl?: string;
@@ -18,20 +18,17 @@ interface PlaywrightBrowserProps {
   onDOMTreeUpdate?: (domTree: DOMNode | null) => void;
   onNodeSelect?: (node: DOMNode) => void;
   onTestResultUpdate?: (result: any) => void;
-  generatedTest?: string; // Add this prop to receive the generated test script
+  generatedTest?: string;
 }
 
-/**
- * A browser component that uses Playwright via API to capture and interact with web pages.
- * 
- * Features:
- * - DOM tree extraction and visualization
- * - Element highlighting in the browser
- * - Web page iframe preview
- * - Test script editor and execution
- * 
- * This component is used in the main Arten application to provide DOM exploration and testing capabilities.
- */
+interface TestStepResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  timestamp?: string;
+  durationMs?: number;
+}
+
 export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   initialUrl = '',
   height = '100%',
@@ -39,100 +36,93 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   onDOMTreeUpdate,
   onNodeSelect,
   onTestResultUpdate,
-  generatedTest: initialGeneratedTest = '' // Rename parameter to avoid collision
+  generatedTest: initialGeneratedTest = ''
 }) => {
-  // Local React state instead of Zustand store
-  // Browser state
-  const [storeUrl, setStoreUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isBrowserLaunched, setIsBrowserLaunched] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // DOM state
-  const [domTree, setDOMTree] = useState<DOMNode | null>(null);
-  const [selectedElement, setSelectedElement] = useState<DOMNode | null>(null);
-  
-  // Testing state
-  const [generatedTest, setGeneratedTest] = useState<string>(initialGeneratedTest || '');
-  const [isGenerating, setIsGenerating] = useState<boolean>(false);
-  const [isTestRunning, setIsTestRunning] = useState<boolean>(false);
-  const [testResult, setTestResult] = useState<any[]>([]);
-  
-  // Settings state
-  const [globalConfig, setGlobalConfig] = useState<{
-    headless: boolean;
-    browserType: 'chromium' | 'firefox' | 'webkit';
-  }>({
-    headless: true,
-    browserType: 'chromium'
-  });
-  
-  // Helper function to reset browser state
-  const resetBrowser = () => {
-    setStoreUrl(null);
-    setIsLoading(false);
-    setIsBrowserLaunched(false);
-    setError(null);
-  };
-  
-  // Local state that doesn't need to be in the global store
-  const [inputUrl, setInputUrl] = useState<string>(initialUrl);
-  const [showTestEditor, setShowTestEditor] = useState<boolean>(false);
-  
-  // Set URL from props initially if provided - only on first mount, not on re-renders
-  useEffect(() => {
-    if (initialUrl && initialUrl !== '') {
-      // Important: Only set the store URL if it's not already set
-      // This prevents circular updates between the store and component
-      setStoreUrl(initialUrl);
-      setInputUrl(initialUrl);
-    }
-  }, []); // Empty dependency array = only run on mount
-  
+  // Use browser store instead of local state
+  const {
+    url: storeUrl,
+    isLoading,
+    setUrl,
+    setLoading,
+    isLaunched,
+    setLaunched,
+    isTestRunning,
+    setTestRunning,
+    testResult,
+    setTestResult,
+    status,
+    editorTabs,
+    activeTabId,
+    addEditorTab,
+    updateEditorTab,
+    setStatus
+  } = useBrowserStore();
+
+  // Local state for UI-only concerns
+  const [inputUrl, setInputUrl] = React.useState<string>(initialUrl);
+  const [error, setError] = React.useState<string | null>(null);
+  const [generatedTest, setGeneratedTest] = React.useState<string>(initialGeneratedTest);
+  const [selectedElement, setSelectedElement] = React.useState<DOMNode | null>(null);
+  const [domTree, setDomTree] = React.useState<DOMNode | null>(null);
+  const [editorRef, setEditorRef] = React.useState<{ addNewTab: (content: string, name: string) => string } | null>(null);
+
   // Use the store URL or fallback to the initialUrl prop
-  const url = storeUrl || initialUrl;
+  const currentUrl = storeUrl || initialUrl;
 
   // Add iframeRef for browser display
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
-  // Handle browser launch and cleanup
-  // Listen for test script generation events
+  // Effect to handle changes to generatedTest prop
   useEffect(() => {
-    const handleTestScriptGenerated = (event: CustomEvent) => {
-      if (event.detail?.script) {
-        console.log('[Arten] PlaywrightBrowser received test script event');
-        setGeneratedTest(event.detail.script);
-      }
-    };
-    
-    // Add event listener for test script generation
-    window.addEventListener('arten:test-script-generated', handleTestScriptGenerated as EventListener);
-    
-    return () => {
-      // Clean up event listener
-      window.removeEventListener('arten:test-script-generated', handleTestScriptGenerated as EventListener);
-    };
-  }, []);
-
-  // Update local state when the prop changes - but only on first mount, not on re-renders
-  useEffect(() => {
-    if (initialGeneratedTest && initialGeneratedTest !== '') {
-      console.log('[Arten] PlaywrightBrowser received initial test script via props');
-      setGeneratedTest(initialGeneratedTest);
+    if (initialGeneratedTest && activeTabId) {
+      // If we have an active tab, update its content instead of creating a new one
+      updateEditorTab(activeTabId, { content: initialGeneratedTest });
+      return;
     }
-  }, []); // Empty dependency array = only run on mount
 
+    if (initialGeneratedTest && (!editorTabs.some(tab => tab.content === initialGeneratedTest))) {
+      console.log('[Arten] Adding new tab with generated test');
+      const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
+      const testName = `Generated Test ${timestamp}`;
+      
+      // Add new tab with the generated test
+      const newTab = {
+        id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        name: testName,
+        content: initialGeneratedTest,
+        language: 'typescript' as const,
+        config: {
+          headless: true,
+          browserType: 'chromium' as const
+        }
+      };
+      
+      addEditorTab(newTab);
+      console.log('[Arten] Created new tab:', newTab.id);
+
+      // Switch to the Tests tab and wait for it to be available
+      setTimeout(() => {
+        const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
+        if (testsTabTrigger) {
+          console.log('[Arten] Switching to Tests tab');
+          testsTabTrigger.click();
+        }
+      }, 100);
+    }
+  }, [editorTabs, addEditorTab]);
+
+  // Handle browser launch and cleanup
   useEffect(() => {
     // Attempt to initialize browser on component mount, but only if not already launched
     const initBrowser = async () => {
-      // Prevent multiple initializations
-      if (isBrowserLaunched) {
+      if (isLaunched) {
         console.log('[Arten] Browser already launched, skipping initialization');
         return;
       }
 
       try {
         console.log('[Arten] Initializing browser on component mount...');
+        setStatus('BROWSER_INITIALIZING' as SystemAction, 'Initializing browser...');
         const response = await fetch('/api/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -142,33 +132,36 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         const data = await response.json();
         if (data.success) {
           console.log('[Arten] Browser initialized successfully on mount');
-          setIsBrowserLaunched(true);
+          setLaunched(true);
+          setStatus('BROWSER_READY' as SystemAction, 'Browser ready', 'success');
         } else {
           console.error('[Arten] Browser initialization failed:', data.error);
+          setStatus('BROWSER_ERROR' as SystemAction, `Browser initialization failed: ${data.error}`, 'error');
         }
       } catch (error) {
-        console.error('[Arten] Error initializing browser:', error);
+        console.error('[Arten] Browser initialization error:', error);
+        setStatus('BROWSER_ERROR' as SystemAction, `Browser initialization error: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
     };
-    
-    // Initialize browser on mount - with a small delay to prevent race conditions
-    const timer = setTimeout(() => {
-      initBrowser();
-    }, 100);
-    
-    return () => clearTimeout(timer);
-    
-    // Clean up when component unmounts
+
+    initBrowser();
+
+    // Cleanup function to close browser when component unmounts
     return () => {
-      console.log('Component unmounting, closing browser...');
-      if (isBrowserLaunched) {
+      if (isLaunched) {
+        console.log('[Arten] Closing browser on component unmount...');
+        setStatus('BROWSER_CLOSING' as SystemAction, 'Closing browser...');
         fetch('/api/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'close' })
-        })
-        .then(() => console.log('Browser closed successfully'))
-        .catch(error => console.error('Error closing browser:', error));
+        }).then(() => {
+          setLaunched(false);
+          setStatus('BROWSER_CLOSED' as SystemAction, 'Browser closed', 'success');
+        }).catch(error => {
+          console.error('Error closing browser:', error);
+          setStatus('BROWSER_ERROR' as SystemAction, 'Failed to close browser', 'error');
+        });
       }
     };
   }, []);
@@ -176,7 +169,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   // Launch browser and navigate to URL
   const handleLoadUrl = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    setLoading(true);
     setError(null);
     
     console.log('Loading URL:', inputUrl);
@@ -184,6 +177,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     try {
       // Browser initialization - always ensure it's ready
       console.log('Ensuring browser is initialized...');
+      setStatus('BROWSER_INITIALIZING' as SystemAction, 'Initializing browser...');
       const initResponse = await fetch('/api/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -195,14 +189,17 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       if (!initData.success) {
         console.error('Browser initialization failed:', initData.error);
+        setStatus('BROWSER_ERROR' as SystemAction, `Browser initialization failed: ${initData.error}`, 'error');
         throw new Error(initData.error || 'Failed to initialize browser');
       }
       
-      setIsBrowserLaunched(true);
+      setLaunched(true);
+      setStatus('BROWSER_READY' as SystemAction, 'Browser ready', 'success');
       console.log('Browser initialized successfully');
       
       // Navigate to URL
       console.log('Navigating to URL:', inputUrl);
+      setStatus('NAVIGATING' as SystemAction, `Navigating to ${inputUrl}...`);
       const navResponse = await fetch('/api/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,31 +211,28 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       if (!navData.success) {
         console.error('Navigation failed:', navData.error);
-        throw new Error(navData.error || 'Failed to navigate');
+        setStatus('NAVIGATION_ERROR' as SystemAction, `Navigation failed: ${navData.error}`, 'error');
+        throw new Error(navData.error || 'Failed to navigate to URL');
       }
       
+      setUrl(inputUrl);
+      setStatus('NAVIGATION_SUCCESS' as SystemAction, `Navigated to ${inputUrl}`, 'success');
       console.log('Navigation successful');
-      setStoreUrl(inputUrl);
-      
-      // Extract DOM tree
-      console.log('Extracting DOM tree...');
-      await handleExtractDOM();
-      
-    } catch (err: any) {
-      console.error('Error loading URL:', err);
-      setError(err?.message || 'Failed to load URL');
+    } catch (error) {
+      console.error('Error during URL load:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setError(errorMessage);
+      setStatus('BROWSER_ERROR' as SystemAction, `Error: ${errorMessage}`, 'error');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-  
+
   // Extract DOM from the current page
   const handleExtractDOM = async () => {
-    // Browser will auto-initialize if not launched
-    // So we don't need to prevent the action if not launched
-    console.log('Extracting DOM, browser state:', isBrowserLaunched ? 'launched' : 'not launched');
-    
-    setIsLoading(true);
+    console.log('Extracting DOM, browser state:', isLaunched ? 'launched' : 'not launched');
+    setLoading(true);
+    setStatus('EXTRACTING_DOM' as SystemAction, 'Extracting DOM tree...');
     
     try {
       const response = await fetch('/api/browser', {
@@ -249,69 +243,39 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       const data = await response.json();
       if (!data.success) {
+        setStatus('DOM_ERROR' as SystemAction, 'Failed to extract DOM', 'error');
         throw new Error(data.error || 'Failed to extract DOM');
       }
       
-      setDOMTree(data.domTree);
+      setDomTree(data.domTree);
+      setStatus('DOM_UPDATED' as SystemAction, 'DOM tree updated', 'success');
       
       if (onDOMTreeUpdate) {
         onDOMTreeUpdate(data.domTree);
-      }
-      
-      // Make the DOM available to the main project sidebar
-      if (window && window.dispatchEvent) {
-        window.dispatchEvent(new CustomEvent('arten:dom-updated', { detail: { domTree: data.domTree } }));
       }
       
       setError(null);
     } catch (err: any) {
       console.error('Error extracting DOM:', err);
       setError(err?.message || 'Failed to extract DOM');
+      setStatus('DOM_ERROR' as SystemAction, `Failed to extract DOM: ${err.message}`, 'error');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  // We now use the highlighting in the main project's sidebar
-  // Just set the selected element locally for reference
+  // Handle node selection
   const handleNodeSelect = (node: DOMNode) => {
     console.log('Element selected:', node);
     setSelectedElement(node);
+    setStatus('ELEMENT_SELECTED' as SystemAction, `Selected element: ${node.tagName}`, 'success');
     
-    // Pass the selected node to the parent component if needed
     if (onNodeSelect) {
       onNodeSelect(node);
     }
   };
 
-  /**
-   * Close a browser instance associated with a specific test script tab
-   * @param tabId - The ID of the tab/script whose browser should be closed
-   */
-  const handleCloseTab = async (tabId: string) => {
-    try {
-      console.log(`[Arten] Closing browser for script ${tabId}`);
-      // Send request to close the specific browser instance
-      await fetch('/api/browser', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'close',
-          scriptId: tabId
-        })
-      });
-    } catch (error) {
-      console.error(`[Arten] Error closing browser for script ${tabId}:`, error);
-    }
-  };
-
-  /**
-   * Execute a Playwright test script with a specific configuration
-   * 
-   * @param scriptContent - The content of the script to run
-   * @param scriptId - Unique identifier for this script's browser instance
-   * @param config - Browser configuration (headless mode, browser type)
-   */
+  // Handle test execution with tab-specific state
   const handleRunTest = async (
     scriptContent: string, 
     scriptId: string, 
@@ -319,27 +283,23 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   ) => {
     console.log(`[Arten] Starting test execution for script ${scriptId}...`);
     
-    // Validate test script exists
     if (!scriptContent || scriptContent.trim() === '') {
       console.log('[Arten] Error: No test script to run');
       setError('Please generate or input a Playwright test first');
       return;
     }
 
-    // IMPORTANT: Create local variables to track state during execution
-    // This ensures we only update state once at the end of the process
-    const localIsRunning = true;
-    const localTestResults: any[] = [];
-    
-    // Update UI state just once at the beginning
-    setIsTestRunning(localIsRunning);
-    setTestResult(localTestResults);
+    setTestRunning(true);
+    setTestResult([]);
     setError(null);
+    setStatus('RUNNING_TEST' as SystemAction, 'Running test script...', 'loading');
     
     try {
+      // Update the specific tab's running state
+      updateEditorTab(scriptId, { isRunning: true });
+      
       console.log(`[Arten] Sending test script to /api/browser endpoint for execution with config:`, config);
       
-      // Send test script to API for execution with configuration
       const response = await fetch('/api/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,97 +309,94 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
           scriptId: scriptId,
           config: {
             headless: config.headless,
-            browserType: config.browserType
+            browserType: config.browserType,
+            closeBrowserAfterTest: true
           }
         })
       });
       
-      // Check for HTTP errors
       if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`API request failed (${response.status}): ${errorText || response.statusText}`);
+        let errorMessage: string;
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorData.message || 'Unknown error';
+        } catch {
+          errorMessage = errorText || 'Failed to parse error response';
+        }
+        throw new Error(errorMessage);
       }
       
-      // Process API response
       const data = await response.json();
+      console.log('[Arten] Test execution response:', data);
       
-      // Handle API-level errors
       if (!data.success) {
-        console.log('[Arten] Test execution failed:', data.error);
-        throw new Error(data.error || 'Failed to run test');
+        throw new Error(data.error || 'Test execution failed');
       }
       
-      // Handle successful test execution
-      console.log('[Arten] Test execution successful, updating UI with results');
-      // Store result in local variable first to avoid multiple store updates
-      const finalResults = data.result;
+      // Update test results
+      setTestResult(data.results || []);
       
-      // Update state with final test results
-      setTestResult(finalResults);
+      // Update tab state with results
+      updateEditorTab(scriptId, {
+        isRunning: false,
+        results: data.results || [],
+        error: undefined
+      });
       
-      // Notify parent component if callback provided
-      if (onTestResultUpdate) {
-        onTestResultUpdate(finalResults);
-      }
-    } catch (err: any) {
-      // Handle and display errors
-      console.error('[Arten] Error running test:', err);
-      setError(err?.message || 'Failed to run test');
-      // Set test result as an array with a single error result
-      setTestResult([{ 
-        success: false, 
-        error: err?.message,
-        timestamp: new Date().toISOString()
-      }]);
+      setStatus('TEST_SUCCESS' as SystemAction, 'Test execution completed successfully', 'success');
+      
+      // Trigger test reports refresh
+      window.dispatchEvent(new Event('test-reports-refresh'));
+    } catch (error) {
+      console.error('[Arten] Error during test execution:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      setError(errorMessage);
+      setStatus('TEST_FAILED' as SystemAction, `Test execution failed: ${errorMessage}`, 'error');
+      
+      updateEditorTab(scriptId, {
+        isRunning: false,
+        error: errorMessage,
+        results: []
+      });
     } finally {
-      // Always reset loading state when done
-      setIsTestRunning(false);
+      setTestRunning(false);
     }
   };
 
-  const toggleTestEditor = () => {
-    setShowTestEditor(!showTestEditor);
-  };
-
-  // Generate Playwright test from DOM and selected element
+  // Handle test generation
   const handleGenerateTest = async () => {
     console.log('[Arten] Starting Playwright test generation from DOM...');
-    console.log('[Arten] Current URL:', url);
+    console.log('[Arten] Current URL:', currentUrl);
     console.log('[Arten] Selected element:', selectedElement);
     
-    // Use local variables to track state changes during function execution
-    // This helps prevent excessive re-renders
-    const isRunning = true;
-    
-    // Only update state once at the beginning
-    setIsTestRunning(isRunning);
+    setTestRunning(true);
     setError(null);
+    setStatus('GENERATING_TEST' as SystemAction, 'Generating test script...', 'loading');
     
     try {
-      // Create a descriptive prompt for the page
-      const pageName = url ? new URL(url).hostname : 'Current Page';
+      const pageName = currentUrl ? new URL(currentUrl).hostname : 'Current Page';
       console.log('[Arten] Generating test for page:', pageName);
       
       const prompt = {
         description: `Generate a test for ${pageName}`,
-        target: url || 'https://example.com',
+        target: currentUrl || 'https://example.com',
         additionalContext: 'Generate a complete, standalone Playwright test that can be executed without manual modifications.'
       };
 
-      // Include the selected DOM node if available
       const node = selectedElement ? {
         selector: selectedElement.selector,
         attributes: selectedElement.attributes,
-        innerText: selectedElement.innerText?.substring(0, 100) // Limit text length
+        innerText: selectedElement.innerText?.substring(0, 100)
       } : null;
       
-      // Get any config options (like API keys) that might be needed
       const config = {
         api: {
-          openaiKey: process.env.OPENAI_API_KEY // This will be overridden by server-side env if set
+          openaiKey: process.env.OPENAI_API_KEY
         },
         playwright: {
-          timeout: 30000 // Default timeout
+          timeout: 30000
         }
       };
       
@@ -453,23 +410,45 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         body: JSON.stringify({
           prompt,
           node,
-          domTree,
           config
-        }),
+        })
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate test script');
+        throw new Error(`Failed to generate test: ${response.statusText}`);
       }
       
-      const playwrightScript = await response.text();
-      setGeneratedTest(playwrightScript);
+      const data = await response.json();
+      console.log('[Arten] Test generation response:', data);
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate test');
+      }
+      
+      // Add the generated test to the store
+      if (data.script) {
+        addEditorTab({
+          id: Date.now().toString(),
+          name: `Generated Test ${editorTabs.length + 1}`,
+          content: data.script,
+          language: 'typescript',
+          config: {
+            headless: true,
+            browserType: 'chromium'
+          }
+        });
+        setStatus('TEST_GENERATED' as SystemAction, 'Test script generated successfully', 'success');
+      } else {
+        throw new Error('No test script was generated');
+      }
     } catch (error) {
-      console.error('Test generation failed:', error);
-      setError(error instanceof Error ? error.message : String(error));
+      console.error('[Arten] Error during test generation:', error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      setError(errorMessage);
+      setStatus('TEST_ERROR' as SystemAction, `Test generation failed: ${errorMessage}`, 'error');
     } finally {
-      setIsTestRunning(false);
+      setTestRunning(false);
     }
   };
 
@@ -503,7 +482,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
           <div className="flex-1 flex" style={{ height: 'calc(100% - 73px)' }}>
             {error ? (
               <div className="p-4 text-destructive">{error}</div>
-            ) : !isBrowserLaunched ? (
+            ) : !isLaunched ? (
               <div className="flex items-center justify-center w-full p-4 text-center text-muted-foreground">
                 Enter a URL to begin
               </div>
@@ -519,59 +498,84 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
                       <TabsTrigger value="tests" className="shadow-none px-3 h-full text-sm flex items-center rounded-none border-b-0 data-[state=active]:border-b-[3px] data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=inactive]:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0 hover:outline-none hover:ring-0 data-[state=active]:bg-transparent relative z-10">
                         Test Scripts
                       </TabsTrigger>
+                      <TabsTrigger value="reports" className="shadow-none px-3 h-full text-sm flex items-center rounded-none border-b-0 data-[state=active]:border-b-[3px] data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=inactive]:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0 hover:outline-none hover:ring-0 data-[state=active]:bg-transparent relative z-10">
+                        <FileText className="h-3.5 w-3.5 mr-1.5" />
+                        Test Reports
+                      </TabsTrigger>
                     </TabsList>
                     <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-border"></div>
                   </div>
 
                   {/* Tab content panels */}
                   <TabsContent value="browser" className="flex-1 overflow-auto p-0">
-                    {url ? (
+                    {currentUrl ? (
                       <iframe 
                         ref={iframeRef} 
                         title="Playwright Browser" 
                         className="w-full h-full"
-                        src={url}
+                        src={currentUrl}
                         sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
                         onLoad={() => {
                           console.log('Iframe loaded');
-                          // Extract DOM after iframe loads to ensure we have the latest state
                           handleExtractDOM();
                         }}
                       />
                     ) : (
-                      <div className="p-4 text-center text-muted-foreground">
-                        Enter a URL in the field above to begin
+                      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                        <div className="w-16 h-16 mb-6 text-muted-foreground/30">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            className="w-10 h-10"
+                          >
+                            <path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z" />
+                            <path d="M7 7h.01" />
+                          </svg>
+                        </div>
+                        <h3 className="text-lg font-medium mb-2">No URL Entered</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mb-4">
+                          Enter a URL in the field above to start browsing and testing your web application.
+                        </p>
+                        <div className="text-xs text-muted-foreground/60">
+                          Example: http://localhost:3000
+                        </div>
                       </div>
                     )}
                   </TabsContent>
 
                   <TabsContent value="tests" className="flex-1 overflow-auto p-6">
-                    {/* TabbedTestEditor for multiple test scripts */}
                     <TabbedTestEditor
                       onRunTest={handleRunTest}
-                      onCloseTab={handleCloseTab}
-                      initialScript={generatedTest}
-                      globalConfig={globalConfig}
+                      onCloseTab={async (scriptId) => {
+                        try {
+                          console.log(`[Arten] Closing browser for script ${scriptId}`);
+                          await fetch('/api/browser', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                              action: 'close',
+                              scriptId: scriptId
+                            })
+                          });
+                        } catch (error) {
+                          console.error(`[Arten] Error closing browser for script ${scriptId}:`, error);
+                        }
+                      }}
+                      onRef={setEditorRef}
+                      globalConfig={{
+                        headless: true,
+                        browserType: 'chromium'
+                      }}
                     />
-                    
-                    {testResult && testResult.length > 0 && (
-                      <div className="h-64 border-t p-4 overflow-auto mt-6">
-                        <h4 className="font-medium mb-2">Test Results</h4>
-                        {testResult.map((result, index) => (
-                          <div key={index} className={`p-3 rounded my-1 ${result.success ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300' : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'}`}>
-                            {result.success ? (
-                              <p>Test passed successfully!</p>
-                            ) : (
-                              <p>Test failed: {result.error || 'Unknown error'}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                  </TabsContent>
+
+                  <TabsContent value="reports" className="flex-1 overflow-auto p-6">
+                    <TestReports />
                   </TabsContent>
                 </Tabs>
-                
-                {/* Test Configuration Panel removed - now on separate settings page */}
               </div>
             )}
           </div>
@@ -580,3 +584,5 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     </div>
   );
 };
+
+export default PlaywrightBrowser;

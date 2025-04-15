@@ -21,8 +21,8 @@ export interface TestConfig {
     retries: number;
   };
   api: {
-    openaiKey?: string;
-    openaiModel?: string;
+    apiKey?: string;
+    model?: string;
   };
   storage: {
     location: 'local' | 'remote';
@@ -53,9 +53,8 @@ export const defaultConfig: TestConfig = {
     retries: 1,
   },
   api: {
-    // Load the API key from environment variables if available
-    openaiKey: typeof process !== 'undefined' && process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY : '',
-    openaiModel: 'gpt-4',
+    apiKey: undefined,
+    model: 'anthropic/claude-3-sonnet',
   },
   storage: {
     location: 'local',

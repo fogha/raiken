@@ -1,23 +1,12 @@
-import { type DOMNode } from '@/types/dom';
-
-// Browser state types
-export interface BrowserState {
-  url: string | null;
-  isLoading: boolean;
-  isBrowserLaunched: boolean;
-  error: string | null;
-}
+import { DOMNode } from '@/types/dom';
+import { TestTab, TestScriptConfig } from '@/types/test';
+import { BrowserState, ViewportState } from '@/types/browser';
+import { StatusLevel } from '@/types/status';
 
 // DOM state types
 export interface DOMState {
   domTree: DOMNode | null;
   selectedNode: DOMNode | null;
-}
-
-// Test script tab configuration
-export interface TestScriptConfig {
-  headless: boolean;
-  browserType: 'chromium' | 'firefox' | 'webkit';
 }
 
 // Test result structure
@@ -28,24 +17,13 @@ export interface TestResult {
   timestamp: string;
 }
 
-// Test script tab data structure
-export interface TestTab {
-  id: string;
-  name: string;
-  content: string;
-  language: 'typescript' | 'javascript' | 'json';
-  config: TestScriptConfig;
-  isRunning?: boolean;
-  results?: TestResult[];
-  error?: string;
-}
-
 // Testing state types
 export interface TestingState {
   tabs: TestTab[];
   activeTabId: string | null;
   jsonTestScript: string;
-  testScript: string;
+  testScripts: string[];
+  generatedTests: string[];
   isGenerating: boolean;
   isRunning: boolean;
   showResults: boolean;
@@ -74,24 +52,27 @@ export interface AppState {
   batchUpdates: (updates: () => void) => void;
   
   // Browser actions
-  setUrl: (url: string | null) => void;
+  setUrl: (url: string) => void;
   setIsLoading: (isLoading: boolean) => void;
-  setIsBrowserLaunched: (isBrowserLaunched: boolean) => void;
-  setBrowserError: (error: string | null) => void;
-  resetBrowser: () => void;
+  setIsLaunched: (isLaunched: boolean) => void;
+  setViewport: (viewport: ViewportState) => void;
+  setScale: (scale: number) => void;
+  setIsMobile: (isMobile: boolean) => void;
+  setStatus: (type: string, message: string, level: StatusLevel) => void;
   
   // DOM actions
   setDOMTree: (domTree: DOMNode | null) => void;
-  setSelectedNode: (selectedNode: DOMNode | null) => void;
+  setSelectedNode: (node: DOMNode | null) => void;
   
   // Testing actions
   setTabs: (tabs: TestTab[]) => void;
   setActiveTabId: (activeTabId: string | null) => void;
   addTab: (tab: TestTab) => void;
   removeTab: (tabId: string) => void;
-  updateTab: (tabId: string, tabData: Partial<TestTab>) => void;
+  updateTab: (tabId: string, updates: Partial<TestTab>) => void;
   setJsonTestScript: (jsonTestScript: string) => void;
-  setTestScript: (testScript: string) => void;
+  addTestScript: (script: string) => void;
+  addGeneratedTest: (script: string) => void;
   setIsGenerating: (isGenerating: boolean) => void;
   setIsRunning: (isRunning: boolean) => void;
   setShowResults: (showResults: boolean) => void;

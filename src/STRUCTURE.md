@@ -25,12 +25,38 @@ src/core/
 └── index.ts                  # Main exports
 ```
 
+## State Management
+
+```
+src/store/
+├── browserStore.ts          # Browser state management
+│   ├── Browser state        # URL, loading, launched status
+│   ├── Test execution       # Test running state and results
+│   ├── Browser settings     # Viewport, scale, mobile mode
+│   └── System status        # Status tracking for all operations
+│
+├── projectStore.ts          # Project state management
+│   ├── Project info         # Current project details
+│   ├── Navigation           # URL and routing state
+│   └── DOM state           # DOM tree and selected elements
+│
+├── testStore.ts            # Test state management
+│   ├── Test scripts        # Current and saved test scripts
+│   ├── Test results        # Execution results and history
+│   └── Test settings       # Configuration and preferences
+│
+└── flowStore.ts           # Flow builder state
+    ├── Flow definition    # Action nodes and connections
+    ├── Editing state      # Selected nodes and edit mode
+    └── Execution state    # Flow running status
+```
+
 ## UI Components
 
 ```
 src/components/
 ├── layout/                   # Layout components
-│   ├── ProjectViewer.tsx     # Main project container (imports PlaywrightBrowser from core)
+│   ├── ProjectViewer.tsx     # Main project container with status bar
 │   ├── SideBar.tsx           # Sidebar navigation
 │   ├── TopBar.tsx            # Top navigation
 │   └── index.ts              # Exports
@@ -53,28 +79,94 @@ src/app/api/
 
 ```
 src/types/
-├── dom.ts                  # DOM-related types for tree representation
-├── test.ts                 # Test DSL types for JSON-based test scripts
-├── flow.ts                 # Flow builder types
-└── config.ts               # Configuration types
+├── dom.ts                  # DOM-related types
+│   ├── DOMNode            # DOM tree node representation
+│   └── DOMAttributes      # Element attributes
+│
+├── test.ts                # Test-related types
+│   ├── TestAction         # Test action types (click, type, assert, etc.)
+│   ├── TestStep          # Individual test step structure
+│   ├── TestCase          # Test case with steps
+│   ├── TestSuite         # Collection of test cases
+│   ├── TestScriptConfig  # Test configuration (headless, browser)
+│   ├── TestResult        # Test execution results
+│   ├── TestTab           # Test editor tab data
+│   └── Component Props   # UI component prop types
+│
+├── flow.ts                # Flow builder types
+│   ├── FlowNode          # Action node definitions
+│   ├── FlowEdge          # Node connections
+│   └── FlowConfig        # Flow execution settings
+│
+├── status.ts             # System status types
+│   ├── StatusState       # Status tracking
+│   ├── StatusLevel       # Status severity levels
+│   └── StatusMessage     # Status message format
+│
+└── config.ts             # Configuration types
+    ├── AppConfig         # Application settings
+    ├── APIConfig         # API configuration
+    └── BrowserConfig     # Browser settings
 ```
 
 ## Key Features
 
-1. **DOM Extraction & Visualization**
+1. **State Management & Status Tracking**
+   - Centralized state using Zustand stores
+   - Real-time status updates with color coding
+   - Comprehensive system action tracking
+   - Persistent state across components
+
+2. **DOM Extraction & Visualization**
    - Server-side DOM extraction via Playwright (headless mode)
    - DOM tree viewer with element highlighting
    - JSON view for detailed inspection
+   - Real-time DOM updates
 
-2. **Test Creation & Execution**
+3. **Test Creation & Execution**
    - JSON-based test script editor with syntax validation
    - Support for navigation, clicks, typing, and waiting
    - Element assertions (visibility, content)
    - URL assertions
    - Detailed test results with step-by-step tracking
 
-3. **Web Application Preview**
+4. **Web Application Preview**
    - Live iframe preview of the target application
    - Synchronized with DOM extraction
    - Highlights selected elements for visual feedback
+   - Status-aware loading states
+
+## State Flow
+
+1. **Browser Operations**
+   ```
+   Action -> Status Update -> State Change -> UI Update
+   ```
+   Example: Loading URL
+   - Set loading state
+   - Update status (NAVIGATING)
+   - Navigate to URL
+   - Update DOM tree
+   - Update status (SUCCESS/ERROR)
+
+2. **Test Operations**
+   ```
+   Action -> Status Update -> Test Execution -> Results -> State Update
+   ```
+   Example: Running Test
+   - Set test running state
+   - Update status (RUNNING_TEST)
+   - Execute test
+   - Collect results
+   - Update status (PASSED/FAILED)
+
+3. **DOM Operations**
+   ```
+   Action -> Status Update -> DOM Update -> State Change -> UI Refresh
+   ```
+   Example: Selecting Element
+   - Update status (ELEMENT_SELECTED)
+   - Update selected node
+   - Highlight element
+   - Update UI components
 

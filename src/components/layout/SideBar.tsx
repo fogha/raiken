@@ -7,7 +7,7 @@ import { cn } from "@/core/common/utils";
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
 import { DOMNode } from '@/types/dom';
-// Using local state instead of Zustand store
+import { useProjectStore } from '@/store/projectStore';
 
 interface SideBarProps {
   onNodeSelect: (node: Element | DOMNode) => void;
@@ -18,7 +18,9 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
   depth?: number;
   onSelect: (node: Element | DOMNode) => void;
 }) => {
-  const [isExpanded, setIsExpanded] = useState(depth < 2); // Only expand first two levels by default
+  const { setSelectedNode } = useProjectStore();
+  const [isExpanded, setIsExpanded] = useState(depth < 2); // Keep local UI state
+
   const hasChildren = node.children && node.children.length > 0;
 
   const highlightElement = () => {
@@ -69,6 +71,7 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
         style={{ paddingLeft: `${depth * 10}px` }}
         onClick={() => {
           onSelect(node);
+          setSelectedNode(node);
           highlightElement();
         }}
         onMouseEnter={highlightElement}
@@ -111,24 +114,21 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
 };
 
 const SideBar = ({ onNodeSelect }: SideBarProps) => {
-  // Local state for DOM tree instead of Zustand store
-  const [domTree, setDOMTree] = useState<DOMNode | null>(null);
-  // Keep local UI state
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const { domTree, sidebarCollapsed, setDomTree, setSidebarCollapsed } = useProjectStore();
 
   useEffect(() => {
     // Listen for direct postMessage events (original method)
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'DOM_TREE_UPDATE') {
         console.log('[SideBar] Received DOM tree via postMessage');
-        setDOMTree(event.data.payload);
+        setDomTree(event.data.payload);
       }
     };
     
     // Listen for custom events from SimpleBrowser (new method)
     const handleCustomEvent = (event: CustomEvent) => {
       console.log('[SideBar] Received DOM tree via custom event');
-      setDOMTree(event.detail);
+      setDomTree(event.detail);
     };
 
     // Add both event listeners
@@ -140,24 +140,24 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
     };
-  }, [setDOMTree]); // Include setDOMTree in dependencies
+  }, []); // Only run on mount
 
   return (
     <div className={cn(
       "transition-all duration-300 ease-in-out h-full",
-      isCollapsed ? "w-10" : "w-[280px]"
+      sidebarCollapsed ? "w-10" : "w-[280px]"
     )}>
       <div className="h-full bg-background/60 backdrop-blur-sm flex flex-col relative">
         <Button
           variant="ghost"
           size="icon"
           className="absolute right-0.5 top-0.5 z-10 h-5 w-5 opacity-60 hover:opacity-100 text-muted-foreground hover:bg-transparent"
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
         >
-          {isCollapsed ? <PanelLeft size={12} /> : <PanelLeftClose size={12} />}
+          {sidebarCollapsed ? <PanelLeft size={12} /> : <PanelLeftClose size={12} />}
         </Button>
         
-        {!isCollapsed && (
+        {!sidebarCollapsed && (
           <>
             <div className="pt-2 pb-1 px-2"></div>
             

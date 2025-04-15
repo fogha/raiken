@@ -12,28 +12,19 @@ import { useTheme } from 'next-themes';
 // Dynamically import Monaco Editor to avoid SSR issues
 const MonacoEditor = dynamic(() => import('react-monaco-editor').then(mod => mod.default), { ssr: false, loading: () => <div className="flex items-center justify-center h-[300px] border rounded-md bg-muted">Loading editor...</div> });
 
-interface TestScriptEditorProps {
+export interface TestScriptEditorProps {
   value: string;
   onChange: (value: string) => void;
   language?: 'typescript' | 'javascript' | 'json';
+  error?: boolean;
 }
 
-export function TestScriptEditor({ value, onChange, language = 'typescript' }: TestScriptEditorProps) {
+export function TestScriptEditor({ value, onChange, language = 'typescript', error }: TestScriptEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
   const [formatSuccess, setFormatSuccess] = useState<boolean | null>(null);
   const [editorMounted, setEditorMounted] = useState(false);
   const { theme } = useTheme();
-  
-  // Initialize Monaco Editor when component mounts
-  useEffect(() => {
-    // This ensures Monaco editor loads correctly
-    import('monaco-editor').then(monaco => {
-      console.log('[Arten] Monaco editor loaded');
-    }).catch(err => {
-      console.error('[Arten] Failed to load Monaco editor:', err);
-    });
-  }, []);
   
   /**
    * Default configuration for Monaco Editor with optimized settings for code editing
@@ -60,7 +51,8 @@ export function TestScriptEditor({ value, onChange, language = 'typescript' }: T
       horizontal: 'visible' as const,
       verticalScrollbarSize: 10,
       horizontalScrollbarSize: 10,
-    }
+    },
+    codeLens: false, // Disable CodeLens feature
   };
 
   /**
@@ -125,8 +117,39 @@ export function TestScriptEditor({ value, onChange, language = 'typescript' }: T
     }
   };
 
+  // Initialize Monaco Editor when component mounts
+  useEffect(() => {
+    // This ensures Monaco editor loads correctly
+    import('monaco-editor').then(monaco => {
+      console.log('[Arten] Monaco editor loaded');
+      
+      // Register empty providers for CodeLens and CodeActions
+      monaco.languages.registerCodeLensProvider('typescript', {
+        provideCodeLenses: () => ({ lenses: [], dispose: () => {} })
+      });
+      
+      monaco.languages.registerCodeLensProvider('javascript', {
+        provideCodeLenses: () => ({ lenses: [], dispose: () => {} })
+      });
+      
+      // Register empty provider for CodeActions
+      monaco.languages.registerCodeActionProvider('typescript', {
+        provideCodeActions: () => ({ actions: [], dispose: () => {} })
+      });
+      
+      monaco.languages.registerCodeActionProvider('javascript', {
+        provideCodeActions: () => ({ actions: [], dispose: () => {} })
+      });
+    }).catch(err => {
+      console.error('[Arten] Failed to load Monaco editor:', err);
+    });
+  }, []);
+
   return (
-    <Card className="p-4 space-y-2 h-[calc(100vh-12rem)] flex flex-col">
+    <Card className={cn(
+      "p-4 space-y-2 h-[calc(100vh-12rem)] flex flex-col",
+      error && "border-destructive"
+    )}>
       <div className="flex justify-between items-center">
         <div className="flex items-center">
           <Code className="h-4 w-4 mr-2" />
@@ -182,11 +205,6 @@ export function TestScriptEditor({ value, onChange, language = 'typescript' }: T
           )}
         </div>
       </div>
-      {!value && (
-        <div className="text-muted-foreground text-xs mt-2">
-          Type or paste your Playwright test script. Use the "Format" button to automatically format it.
-        </div>
-      )}
     </Card>
   );
 } 

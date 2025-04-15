@@ -1,29 +1,35 @@
-import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Input } from './ui/input';
-import { TestConfig, defaultConfig } from '@/types/config';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { useConfigurationStore } from '@/store/configurationStore';
 
-interface ConfigurationPanelProps {
-  config: TestConfig;
-  onChange: (config: TestConfig) => void;
-}
+export function ConfigurationPanel() {
+  const {
+    config,
+    activeTab,
+    setActiveTab,
+    updateExecutionConfig,
+    updateRecordingConfig,
+    updatePlaywrightConfig,
+    updateApiConfig,
+    updateStorageConfig
+  } = useConfigurationStore();
 
-export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>Test Configuration</CardTitle>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="execution">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)}>
           <TabsList>
             <TabsTrigger value="execution">Execution</TabsTrigger>
             <TabsTrigger value="recording">Recording</TabsTrigger>
             <TabsTrigger value="playwright">Playwright</TabsTrigger>
+            <TabsTrigger value="ai">AI Models</TabsTrigger>
             <TabsTrigger value="storage">Storage</TabsTrigger>
           </TabsList>
 
@@ -33,7 +39,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Select 
                 value={config.execution.mode}
                 onValueChange={(value: 'browser' | 'service') => 
-                  onChange({ ...config, execution: { ...config.execution, mode: value } })}
+                  updateExecutionConfig({ mode: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -51,7 +57,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                 <Input 
                   value={config.execution.endpoint}
                   onChange={(e) => 
-                    onChange({ ...config, execution: { ...config.execution, endpoint: e.target.value } })}
+                    updateExecutionConfig({ endpoint: e.target.value })}
                 />
               </div>
             )}
@@ -61,7 +67,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Switch 
                 checked={config.execution.saveTests}
                 onCheckedChange={(checked) => 
-                  onChange({ ...config, execution: { ...config.execution, saveTests: checked } })}
+                  updateExecutionConfig({ saveTests: checked })}
               />
             </div>
 
@@ -70,7 +76,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Switch 
                 checked={config.execution.realTimeResults}
                 onCheckedChange={(checked) => 
-                  onChange({ ...config, execution: { ...config.execution, realTimeResults: checked } })}
+                  updateExecutionConfig({ realTimeResults: checked })}
               />
             </div>
           </TabsContent>
@@ -81,7 +87,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Switch 
                 checked={config.recording.enabled}
                 onCheckedChange={(checked) => 
-                  onChange({ ...config, recording: { ...config.recording, enabled: checked } })}
+                  updateRecordingConfig({ enabled: checked })}
               />
             </div>
 
@@ -90,7 +96,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Switch 
                 checked={config.recording.autoSelectors}
                 onCheckedChange={(checked) => 
-                  onChange({ ...config, recording: { ...config.recording, autoSelectors: checked } })}
+                  updateRecordingConfig({ autoSelectors: checked })}
               />
             </div>
 
@@ -99,7 +105,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Switch 
                 checked={config.recording.smartAssertions}
                 onCheckedChange={(checked) => 
-                  onChange({ ...config, recording: { ...config.recording, smartAssertions: checked } })}
+                  updateRecordingConfig({ smartAssertions: checked })}
               />
             </div>
           </TabsContent>
@@ -111,12 +117,8 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                 <Switch 
                   checked={config.playwright.features.network}
                   onCheckedChange={(checked) => 
-                    onChange({
-                      ...config,
-                      playwright: {
-                        ...config.playwright,
-                        features: { ...config.playwright.features, network: checked }
-                      }
+                    updatePlaywrightConfig({
+                      features: { ...config.playwright.features, network: checked }
                     })}
                 />
               </div>
@@ -126,12 +128,8 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                 <Switch 
                   checked={config.playwright.features.screenshots}
                   onCheckedChange={(checked) => 
-                    onChange({
-                      ...config,
-                      playwright: {
-                        ...config.playwright,
-                        features: { ...config.playwright.features, screenshots: checked }
-                      }
+                    updatePlaywrightConfig({
+                      features: { ...config.playwright.features, screenshots: checked }
                     })}
                 />
               </div>
@@ -141,12 +139,8 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                 <Switch 
                   checked={config.playwright.features.video}
                   onCheckedChange={(checked) => 
-                    onChange({
-                      ...config,
-                      playwright: {
-                        ...config.playwright,
-                        features: { ...config.playwright.features, video: checked }
-                      }
+                    updatePlaywrightConfig({
+                      features: { ...config.playwright.features, video: checked }
                     })}
                 />
               </div>
@@ -156,12 +150,8 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                 <Switch 
                   checked={config.playwright.features.tracing}
                   onCheckedChange={(checked) => 
-                    onChange({
-                      ...config,
-                      playwright: {
-                        ...config.playwright,
-                        features: { ...config.playwright.features, tracing: checked }
-                      }
+                    updatePlaywrightConfig({
+                      features: { ...config.playwright.features, tracing: checked }
                     })}
                 />
               </div>
@@ -172,10 +162,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                   type="number"
                   value={config.playwright.timeout}
                   onChange={(e) => 
-                    onChange({
-                      ...config,
-                      playwright: { ...config.playwright, timeout: parseInt(e.target.value) }
-                    })}
+                    updatePlaywrightConfig({ timeout: parseInt(e.target.value) })}
                 />
               </div>
 
@@ -185,12 +172,48 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
                   type="number"
                   value={config.playwright.retries}
                   onChange={(e) => 
-                    onChange({
-                      ...config,
-                      playwright: { ...config.playwright, retries: parseInt(e.target.value) }
-                    })}
+                    updatePlaywrightConfig({ retries: parseInt(e.target.value) })}
                 />
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="ai" className="space-y-4">
+            <div className="space-y-2">
+              <Label>OpenRouter API Key</Label>
+              <Input 
+                type="password"
+                placeholder="sk-or-..."
+                value={config.api.apiKey || ''}
+                onChange={(e) => 
+                  updateApiConfig({ apiKey: e.target.value })}
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Get your OpenRouter API key at openrouter.ai
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>AI Model</Label>
+              <Select 
+                value={config.api.model || ''}
+                onValueChange={(value: string) => 
+                  updateApiConfig({ model: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anthropic/claude-3-opus">Claude 3 Opus (Best Quality)</SelectItem>
+                  <SelectItem value="anthropic/claude-3-sonnet">Claude 3 Sonnet (Balanced)</SelectItem>
+                  <SelectItem value="anthropic/claude-2">Claude 2 (Legacy)</SelectItem>
+                  <SelectItem value="openai/gpt-4-turbo">GPT-4 Turbo</SelectItem>
+                  <SelectItem value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Models with stronger capabilities will generate better test scripts
+              </p>
             </div>
           </TabsContent>
 
@@ -200,7 +223,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Select 
                 value={config.storage.location}
                 onValueChange={(value: 'local' | 'remote') => 
-                  onChange({ ...config, storage: { ...config.storage, location: value } })}
+                  updateStorageConfig({ location: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -217,7 +240,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Input 
                 value={config.storage.path}
                 onChange={(e) => 
-                  onChange({ ...config, storage: { ...config.storage, path: e.target.value } })}
+                  updateStorageConfig({ path: e.target.value })}
               />
             </div>
 
@@ -226,7 +249,7 @@ export function ConfigurationPanel({ config, onChange }: ConfigurationPanelProps
               <Select 
                 value={config.storage.format}
                 onValueChange={(value: 'json' | 'typescript') => 
-                  onChange({ ...config, storage: { ...config.storage, format: value } })}
+                  updateStorageConfig({ format: value })}
               >
                 <SelectTrigger>
                   <SelectValue />

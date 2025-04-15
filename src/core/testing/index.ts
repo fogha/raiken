@@ -1,5 +1,5 @@
 export * from './test-executor';
-export * from './openai.service';
+export * from './openrouter.service';
 export * from './ui';
 
 import { TestExecutor } from './test-executor';
@@ -11,7 +11,7 @@ let testExecutorInstance: TestExecutor | null = null;
  * Get or create a TestExecutor instance
  * Components should use this function instead of directly instantiating TestExecutor
  */
-export function getTestExecutor(config: { apiKey: string, timeout?: number, outputDir?: string }) {
+export function getTestExecutor(config: { apiKey: string, provider?: 'openai' | 'openrouter', model?: string, timeout?: number, outputDir?: string }) {
   if (!testExecutorInstance) {
     testExecutorInstance = new TestExecutor(config);
   } else if (config.apiKey) {

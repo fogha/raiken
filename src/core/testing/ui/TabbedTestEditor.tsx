@@ -9,46 +9,22 @@ import { Plus, X, Play, MonitorPlay, EyeOff, Eye, RefreshCw, Check, AlertTriangl
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
+import { useBrowserStore } from '@/store/browserStore';
+import { TestScriptConfig, TestResult, TestTab, TabbedTestEditorProps } from '@/types/test';
 
-
-// Configuration for each test script tab
-interface TestScriptConfig {
-  headless: boolean;
-  browserType: 'chromium' | 'firefox' | 'webkit';
-}
-
-// Test result structure
-interface TestResult {
-  success: boolean;
-  message: string;
-  durationMs?: number;
-  timestamp: string;
-}
-
-// Test script tab data structure
-interface TestTab {
-  id: string;
-  name: string;
-  content: string;
-  language: 'typescript' | 'javascript' | 'json';
-  config: TestScriptConfig;
-  isRunning?: boolean;
-  results?: TestResult[];
-  error?: string;
-}
-
-interface TabbedTestEditorProps {
-  onRunTest: (scriptContent: string, scriptId: string, config: TestScriptConfig) => Promise<void>;
-  onCloseTab?: (tabId: string) => Promise<void>;
-  initialScript?: string;
-  globalConfig: TestScriptConfig; // Configuration is now managed in the settings page
-  onRef?: (ref: { addNewTab: (content: string, name: string) => string }) => void; // Function to expose methods to parent
-}
 
 export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', globalConfig, onRef }: TabbedTestEditorProps) {
-  // Local state instead of Zustand store
-  const [tabs, setTabs] = useState<TestTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string>('');
+  // Use browser store for state management
+  const {
+    editorTabs: tabs,
+    activeTabId,
+    setEditorTabs,
+    setActiveTabId,
+    addEditorTab,
+    updateEditorTab,
+    removeEditorTab
+  } = useBrowserStore();
+
   const [showResults, setShowResults] = useState<boolean>(true);
   const [isRunning, setIsRunning] = useState<boolean>(false);
   
@@ -67,11 +43,11 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
         console.log('[Arten] Creating default tab in TabbedTestEditor');
         hasInitializedRef.current = true;
         
-        // Create the tab locally first
+        // Create the tab
         const defaultTab: TestTab = {
           id: `tab_${Date.now()}`,
           name: 'Test Script 1',
-          content: initialScript || '',
+          content: '',
           language: 'typescript',
           config: {
             headless: effectiveGlobalConfig?.headless ?? true,
@@ -79,25 +55,44 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
           }
         };
         
-        // Set the tabs and active tab ID locally, no store needed
-        setTabs([defaultTab]);
-        setActiveTabId(defaultTab.id);
+        // Add the tab to the store
+        addEditorTab(defaultTab);
       }
     }
     
     // Call the initialization function
     initializeDefaultTab();
-  }, [initialScript, effectiveGlobalConfig, tabs]); // Dependencies that won't cause infinite loops
+  }, [effectiveGlobalConfig, tabs, addEditorTab]);
+
+  useEffect(() => {
+    // Skip if no initialScript or if we're still initializing
+    if (!initialScript || !hasInitializedRef.current) return;
+    
+    // Check if the last tab is empty
+    const lastTab = tabs[tabs.length - 1];
+    const isLastTabEmpty = lastTab && (!lastTab.content || lastTab.content.trim() === '');
+    
+    if (isLastTabEmpty) {
+      // If the last tab is empty, update it with the initialScript
+      console.log('[Arten] Updating empty last tab with initialScript');
+      updateEditorTab(lastTab.id, { content: initialScript });
+      // Set this tab as active
+      setActiveTabId(lastTab.id);
+    } 
+    // If the last tab is not empty and we don't already have this content, create a new tab
+    else if (!tabs.some(tab => tab.content === initialScript)) {
+      console.log('[Arten] Adding new tab with initialScript');
+      addNewTab(initialScript, 'Generated Test');
+    }
+  }, [initialScript, tabs, setActiveTabId, updateEditorTab, hasInitializedRef.current]);
   
-  // Register the addNewTab method with the parent component - only run when onRef changes
+  // Register the addNewTab method with the parent component
   useEffect(() => {
     if (onRef) {
       onRef({
         addNewTab: (content: string, name: string) => addNewTab(content, name)
       });
     }
-    // We intentionally exclude addNewTab from dependencies to prevent infinite updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onRef]);
   
   // Create a new empty tab
@@ -110,7 +105,6 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
       name: tabName,
       content: content,
       language: 'typescript',
-      // Initialize with global config but allow per-tab override
       config: {
         ...effectiveGlobalConfig,
         headless: effectiveGlobalConfig?.headless ?? true
@@ -118,27 +112,22 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
       results: []
     };
     
-    // Update local state instead of using Zustand
-    setTabs([...tabs, newTab]);
-    setActiveTabId(newTab.id);
+    // Add the tab to the store
+    addEditorTab(newTab);
     
-    return newTab.id; // Return the ID of the new tab
+    return newTab.id;
   };
   
   // Toggle headless mode for a specific tab
   const toggleHeadlessMode = (tabId: string) => {
     const tab = tabs.find(tab => tab.id === tabId);
     if (tab) {
-      // Update the tabs array with the modified tab
-      setTabs(tabs.map(t => 
-        t.id === tabId ? {
-          ...t,
-          config: {
-            ...t.config,
-            headless: !t.config.headless
-          }
-        } : t
-      ));
+      updateEditorTab(tabId, {
+        config: {
+          ...tab.config,
+          headless: !tab.config.headless
+        }
+      });
     }
   };
   
@@ -154,83 +143,55 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
       await onCloseTab(tabId);
     }
     
-    // Remove the tab from local state
-    const newTabs = tabs.filter(tab => tab.id !== tabId);
-    setTabs(newTabs);
-    
-    // If we're closing the active tab, activate another tab
-    if (activeTabId === tabId) {
-      setActiveTabId(newTabs[0].id);
-    }
+    // Remove the tab from the store
+    removeEditorTab(tabId);
   };
-  
-
 
   // Update tab content when editor changes
   const handleContentChange = (tabId: string, newContent: string) => {
-    setTabs(tabs.map(tab => 
-      tab.id === tabId ? { ...tab, content: newContent } : tab
-    ));
+    updateEditorTab(tabId, { content: newContent });
   };
   
-  // All configuration is now handled in the settings page
-  
-
-  
   // Run the active test script
-  const runActiveTest = async () => {
-    if (!activeTabId) return; // Return early if no active tab
+  const runTest = async () => {
+    if (!activeTabId || isRunning) return;
     
-    const currentTab = tabs.find(tab => tab.id === activeTabId);
-    if (!currentTab) return;
+    const activeTab = tabs.find(tab => tab.id === activeTabId);
+    if (!activeTab) return;
     
-    // Mark the tab as running and clear previous results
-    setTabs(tabs.map(tab => 
-      tab.id === activeTabId ? {
-        ...tab,
+    try {
+      setIsRunning(true);
+      
+      // Mark the tab as running and clear previous results
+      updateEditorTab(activeTabId, {
         isRunning: true,
         results: [],
         error: undefined
-      } : tab
-    ));
-    
-    // Show results panel if it's not already visible
-    setShowResults(true);
-    setIsRunning(true);
-    
-    try {
-      // Use the per-tab configuration (each tab can have its own headless setting)
-      await onRunTest(currentTab.content, currentTab.id, currentTab.config);
+      });
       
-      // Fetch results from the API
-      const response = await fetch('/api/results?testId=' + currentTab.id);
-      if (response.ok) {
-        const data = await response.json();
+      // Show results panel if it's not already visible
+      setShowResults(true);
+      
+      // Run the test
+      if (onRunTest) {
+        await onRunTest(activeTab.content, activeTab.id, activeTab.config);
         
-        // Update the tab with test results using local state
-        setTabs(tabs.map(tab => 
-          tab.id === activeTabId ? {
-            ...tab,
-            isRunning: false,
-            results: data.results || [],
-            error: data.error
-          } : tab
-        ));
-        setIsRunning(false);
-      } else {
-        throw new Error('Failed to fetch test results');
+        // Update the tab with test results from the store
+        updateEditorTab(activeTabId, {
+          isRunning: false,
+          results: [],  // Results will be updated by the parent component through the store
+          error: undefined
+        });
       }
     } catch (error) {
       console.error('Error running test:', error);
       
       // Update the tab with the error
-      setTabs(tabs.map(tab => 
-        tab.id === activeTabId ? {
-          ...tab,
-          isRunning: false,
-          error: error instanceof Error ? error.message : String(error)
-        } : tab
-      ));
+      updateEditorTab(activeTabId, {
+        isRunning: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
       setIsRunning(false);
     }
   };
@@ -247,12 +208,15 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
   };
 
   // Format timestamp to a readable string
-  const formatTimestamp = (timestamp: string): string => {
+  const formatTimestamp = (timestamp?: string): string => {
+    if (!timestamp) return '--';
     try {
       const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '--';
       return date.toLocaleTimeString();
     } catch (e) {
-      return timestamp;
+      console.error('Error formatting timestamp:', e);
+      return '--';
     }
   };
   
@@ -260,13 +224,13 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
     <TooltipProvider>
       <Card className="space-y-2 border-transparent h-[calc(100vh-12rem)] flex flex-col">
         <Tabs value={activeTabId || ''} onValueChange={setActiveTabId} className="flex-1 flex flex-col">
-        <div className="flex items-center justify-between">
-          <TabsList className="h-9 overflow-x-auto max-w-[calc(100%-180px)] bg-transparent p-0 ml-2 mt-2" style={{ marginBottom: '-1px' }}>
+        <div className="flex items-center justify-between mb-2">
+          <TabsList className="h-9 overflow-x-auto max-w-[calc(100%-180px)] bg-transparent p-0 ml-2 mb-2">
             {tabs.map(tab => (
               <TabsTrigger 
                 key={tab.id} 
                 value={tab.id}
-                className="flex items-center gap-1 pr-1 rounded-t-md mr-1 py-1 px-3 data-[state=active]:bg-sky-600 data-[state=active]:text-white border border-border data-[state=inactive]:bg-gray-50 data-[state=inactive]:dark:bg-gray-900 shadow-none"
+                className="flex items-center gap-1 pr-1 mb-2 rounded-t-md mr-1 py-1 px-3 data-[state=active]:bg-sky-600 data-[state=active]:text-white border border-border data-[state=inactive]:bg-gray-50 data-[state=inactive]:dark:bg-gray-900 shadow-none"
               >
                 <span className="truncate max-w-[150px]">{tab.name}</span>
                 {tabs.length > 1 && (
@@ -324,7 +288,7 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button 
-                    onClick={runActiveTest} 
+                    onClick={runTest} 
                     variant="default"
                     size="icon"
                     disabled={!activeTabData || activeTabData.isRunning}
@@ -387,31 +351,35 @@ export function TabbedTestEditor({ onRunTest, onCloseTab, initialScript = '', gl
                   </div>
                 )}
                 
-                {tab.results && tab.results.map((result, index) => (
-                  <div 
-                    key={index} 
-                    className={`mb-2 p-3 border rounded-md ${
-                      result.success 
-                        ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' 
-                        : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        {result.success ? (
-                          <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
-                        ) : (
-                          <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
-                        )}
-                        <span className="font-medium">{result.success ? 'Success' : 'Failed'}</span>
+                {tab.results && tab.results.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    {tab.results.map((result, index) => (
+                      <div 
+                        key={index} 
+                        className={`mb-2 p-3 border rounded-md ${
+                          result.success 
+                            ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800' 
+                            : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {result.success ? (
+                              <Check className="h-5 w-5 text-green-600 dark:text-green-400" />
+                            ) : (
+                              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                            )}
+                            <span className="font-medium">{result.success ? 'Success' : 'Failed'}</span>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {result.timestamp && `Timestamp: ${formatTimestamp(result.timestamp)}`}
+                          </div>
+                        </div>
+                        <p className="text-sm mt-1">{result.error || result.message}</p>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Duration: {formatDuration(result.durationMs)} • {formatTimestamp(result.timestamp)}
-                      </div>
-                    </div>
-                    <p className="text-sm mt-1">{result.message}</p>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             )}
           </TabsContent>

@@ -1,34 +1,49 @@
 import { DOMNode } from '@/types/dom';
 import { TestGenerationPrompt, TestGenerationResult } from '@/types/test';
-import { OpenAIService } from './openai.service';
+import { OpenRouterService } from './openrouter.service';
+import { ReportsService, TestReport } from './reports.service';
 import fs from 'fs';
 import path from 'path';
 
 interface TestConfig {
   apiKey: string;
+  model?: string;
   outputDir?: string;
   timeout?: number;
 }
 
-interface TestResult {
+export interface TestResult {
   success: boolean;
   message: string;
   durationMs?: number;
   timestamp: string;
+  error?: string;
   script?: string;
 }
 
 export class TestExecutor {
   private config: TestConfig;
-  private openai: OpenAIService;
+  private openRouter: OpenRouterService;
+  private reportsService: ReportsService;
   
   constructor(config: TestConfig) {
     this.config = {
-      outputDir: './test-results',
+      model: 'anthropic/claude-3-sonnet',
+      outputDir: path.resolve(process.cwd(), 'test-result'),
       timeout: 30000, // 30 seconds default timeout
       ...config
     };
-    this.openai = new OpenAIService(this.config.apiKey);
+    this.openRouter = new OpenRouterService({
+      apiKey: this.config.apiKey,
+      model: this.config.model
+    });
+    
+    // Initialize the reports service
+    this.reportsService = new ReportsService({
+      apiKey: this.config.apiKey,
+      model: this.config.model,
+      reportsDir: this.config.outputDir
+    });
   }
   
   /**
@@ -76,11 +91,32 @@ export class TestExecutor {
   }
   
   /**
-   * Generate a test script using the OpenAI API
+   * Generate a test script using the OpenRouter API
    */
   async generateScript(prompt: TestGenerationPrompt) {
-    // Generate the script using OpenAI
-    return this.openai.generateTestScript(prompt);
+    // Generate the script using OpenRouter
+    return this.openRouter.generateTestScript(prompt);
+  }
+  
+  /**
+   * Get all test reports
+   */
+  getTestReports(): TestReport[] {
+    return this.reportsService.getReports();
+  }
+  
+  /**
+   * Get a specific test report by ID
+   */
+  getTestReportById(id: string): TestReport | null {
+    return this.reportsService.getReportById(id);
+  }
+  
+  /**
+   * Delete a test report by ID
+   */
+  deleteTestReport(id: string): boolean {
+    return this.reportsService.deleteReport(id);
   }
   
   /**
@@ -89,17 +125,31 @@ export class TestExecutor {
   async saveResults(testScript: string, results: TestResult[]): Promise<string> {
     try {
       // Ensure output directory exists
-      const outputDir = this.config.outputDir || './test-results';
+      const outputDir = this.config.outputDir || path.resolve(process.cwd(), 'test-result');
       if (!fs.existsSync(outputDir)) {
         fs.mkdirSync(outputDir, { recursive: true });
       }
+      console.log(`[Arten] Saving test results to: ${outputDir}`);
       
-      // Create filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const filename = `test-${timestamp}.json`;
+      // Create timestamp
+      const timestamp = new Date().toISOString();
+      const formattedTimestamp = timestamp.replace(/[:.]/g, '-');
+      const filename = `test-${formattedTimestamp}.json`;
       const filePath = path.join(outputDir, filename);
       
-      // Save test data
+      // Calculate total duration
+      const totalDuration = results.reduce((sum, result) => sum + (result.durationMs || 0), 0);
+      
+      // Save test report using the ReportsService
+      await this.reportsService.saveReport({
+        timestamp,
+        testScript,
+        results,
+        durationMs: totalDuration,
+        status: results.every(r => r.success) ? 'success' : 'failure'
+      });
+      
+      // Also save the legacy format for backward compatibility
       const testData = {
         script: testScript,
         results,
@@ -125,12 +175,12 @@ export class TestExecutor {
     const results: TestResult[] = [];
     
     // Create temporary test file
-    const tempFilePath = path.join(this.config.outputDir || './test-results', `temp-test-${Date.now()}.js`);
+    const tempFilePath = path.join(this.config.outputDir || path.resolve(process.cwd(), 'test-result'), `temp-test-${Date.now()}.js`);
     
     try {
       // Ensure the output directory exists
-      if (!fs.existsSync(this.config.outputDir || './test-results')) {
-        fs.mkdirSync(this.config.outputDir || './test-results', { recursive: true });
+      if (!fs.existsSync(this.config.outputDir || path.resolve(process.cwd(), 'test-result'))) {
+        fs.mkdirSync(this.config.outputDir || path.resolve(process.cwd(), 'test-result'), { recursive: true });
       }
       
       // Write test script to temporary file

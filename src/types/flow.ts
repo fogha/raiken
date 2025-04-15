@@ -33,7 +33,7 @@ export interface TestFlow {
 export interface TestResult {
   nodeId: string;
   success: boolean;
-  message?: string;
+  message: string;
   timestamp: number;
 }
 
