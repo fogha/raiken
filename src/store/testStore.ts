@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { convertToRunnableScript } from '@/core/testing/test-script-utils';
 import { useBrowserStore } from './browserStore';
+import { useConfigurationStore } from './configurationStore';
 
 interface TestTab {
   id: string;
@@ -13,6 +14,14 @@ interface TestTab {
   };
 }
 
+interface TestFile {
+  name: string;
+  path: string;
+  content: string;
+  createdAt: string;
+  modifiedAt: string;
+}
+
 interface TestState {
   // Test script state
   testScripts: string[];
@@ -22,6 +31,10 @@ interface TestState {
   isRunning: boolean;
   results: any[];
   generationError: string | null;
+  
+  // Test files from folder
+  testFiles: TestFile[];
+  isLoadingFiles: boolean;
   
   // Test tabs
   tabs: TestTab[];
@@ -35,10 +48,13 @@ interface TestState {
   setResults: (results: any[]) => void;
   setGenerationError: (error: string | null) => void;
   addTab: (tab: TestTab) => void;
+  setTestFiles: (files: TestFile[]) => void;
+  setIsLoadingFiles: (loading: boolean) => void;
   
   // Complex actions
   generateTest: () => Promise<void>;
-  runTest: () => Promise<void>;
+  runTest: (testPath?: string) => Promise<void>;
+  loadTestFiles: () => Promise<void>;
 }
 
 export const useTestStore = create<TestState>((set, get) => ({
@@ -50,6 +66,8 @@ export const useTestStore = create<TestState>((set, get) => ({
   isRunning: false,
   results: [],
   generationError: null,
+  testFiles: [],
+  isLoadingFiles: false,
   tabs: [],
   
   // Simple actions
@@ -61,6 +79,8 @@ export const useTestStore = create<TestState>((set, get) => ({
   setResults: (results) => set({ results }),
   setGenerationError: (error) => set({ generationError: error }),
   addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
+  setTestFiles: (files) => set({ testFiles: files }),
+  setIsLoadingFiles: (loading) => set({ isLoadingFiles: loading }),
   
   // Complex actions
   generateTest: async () => {
@@ -93,6 +113,26 @@ export const useTestStore = create<TestState>((set, get) => ({
         const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
         const testName = testSpec.name ? `${testSpec.name} ${timestamp}` : `Generated Test ${timestamp}`;
         const runnableScript = convertToRunnableScript(testSpec);
+        
+        // Save the test script to the generated-tests folder via API
+        const saveResponse = await fetch('/api/save-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: testName,
+            content: runnableScript
+          }),
+        });
+
+        if (!saveResponse.ok) {
+          const saveError = await saveResponse.json();
+          console.warn('[Arten] Failed to save test script:', saveError.error);
+        } else {
+          const saveResult = await saveResponse.json();
+          console.log('[Arten] Test script saved to:', saveResult.filePath);
+        }
         
         // Add to test scripts array
         state.addTestScript(runnableScript);
@@ -131,19 +171,30 @@ export const useTestStore = create<TestState>((set, get) => ({
     }
   },
   
-  runTest: async () => {
+  runTest: async (testPath?: string) => {
     const state = get();
     state.setIsRunning(true);
     
     try {
+      // Get configuration from configuration store
+      const configStore = useConfigurationStore.getState();
+      
+      // Use provided testPath or default to the most recent generated test
+      const pathToExecute = testPath || `generated-tests/${state.tabs[state.tabs.length - 1]?.name || 'test'}.spec.ts`;
+      
       const response = await fetch('/api/execute-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          script: state.testScripts[state.generatedTests.length - 1],
-          config: {}  // TODO: Add test configuration
+          testPath: pathToExecute,
+          config: {
+            browserType: configStore.config.execution.browserType,
+            retries: configStore.config.execution.retries,
+            timeout: configStore.config.playwright.timeout,
+            features: configStore.config.playwright.features
+          }
         }),
       });
 
@@ -152,14 +203,36 @@ export const useTestStore = create<TestState>((set, get) => ({
         throw new Error(error.error || 'Failed to execute test');
       }
 
-      const { results: testResults, error } = await response.json();
+      const { results: testResults, success, resultFile } = await response.json();
       state.setResults(testResults);
 
-      if (error) throw error;
+      console.log(`[Arten] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
     } catch (error) {
       console.error('Test execution failed:', error);
     } finally {
       state.setIsRunning(false);
+    }
+  },
+
+  loadTestFiles: async () => {
+    const state = get();
+    state.setIsLoadingFiles(true);
+    
+    try {
+      const response = await fetch('/api/test-files');
+      
+      if (!response.ok) {
+        throw new Error('Failed to load test files');
+      }
+      
+      const { files } = await response.json();
+      state.setTestFiles(files);
+      
+      console.log(`[Arten] Loaded ${files.length} test files from folder`);
+    } catch (error) {
+      console.error('Failed to load test files:', error);
+    } finally {
+      state.setIsLoadingFiles(false);
     }
   }
 })); 

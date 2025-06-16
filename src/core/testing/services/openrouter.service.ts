@@ -1,5 +1,3 @@
-import { TestGenerationPrompt } from '@/types/test';
-
 /**
  * Response structure from AI completions endpoint (OpenRouter)
  */

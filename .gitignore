@@ -42,3 +42,6 @@ next-env.d.ts
 # IDE
 .idea
 .vscode
+
+# Generated test scripts
+/generated-tests/

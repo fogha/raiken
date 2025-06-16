@@ -26,10 +26,7 @@ export type SystemAction =
   | 'GENERATING_TEST'
   | 'TEST_GENERATED'
   | 'RUNNING_TEST'
-  | 'TEST_SUCCESS'
   | 'TEST_ERROR'
-  | 'TEST_FAILED'
-  | 'TEST_PASSED'
   | 'IDLE';
 
 interface SystemStatus {
@@ -37,13 +34,6 @@ interface SystemStatus {
   message: string;
   type: StatusType;
   timestamp: number;
-}
-
-export interface TestResult {
-  success: boolean;
-  message?: string;
-  error?: string;
-  timestamp?: string;
 }
 
 interface TestTab {
@@ -56,7 +46,6 @@ interface TestTab {
     browserType: 'chromium' | 'firefox' | 'webkit';
   };
   isRunning?: boolean;
-  results?: TestResult[];
   error?: string;
 }
 
@@ -65,10 +54,6 @@ interface BrowserState {
   url: string;
   isLoading: boolean;
   isLaunched: boolean;
-  
-  // Test execution state
-  isTestRunning: boolean;
-  testResult: TestResult[];
   
   // Editor state
   editorTabs: TestTab[];
@@ -89,8 +74,6 @@ interface BrowserState {
   setUrl: (url: string) => void;
   setLoading: (isLoading: boolean) => void;
   setLaunched: (isLaunched: boolean) => void;
-  setTestRunning: (isRunning: boolean) => void;
-  setTestResult: (result: TestResult[]) => void;
   setViewport: (width: number, height: number) => void;
   setDeviceScaleFactor: (scale: number) => void;
   setMobile: (isMobile: boolean) => void;
@@ -110,8 +93,6 @@ const initialState = {
   url: '',
   isLoading: false,
   isLaunched: false,
-  isTestRunning: false,
-  testResult: [],
   editorTabs: [],
   activeTabId: null,
   viewport: {
@@ -134,8 +115,6 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
   setUrl: (url) => set({ url }),
   setLoading: (isLoading) => set({ isLoading }),
   setLaunched: (isLaunched) => set({ isLaunched }),
-  setTestRunning: (isRunning) => set({ isTestRunning: isRunning }),
-  setTestResult: (result) => set({ testResult: result }),
   setViewport: (width, height) => set((state) => ({
     viewport: { ...state.viewport, width, height }
   })),

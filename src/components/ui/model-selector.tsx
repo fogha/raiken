@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { AI_MODELS } from "@/core/testing/openrouter.service"
+import { AI_MODELS } from "@/core/testing/services/openrouter.service"
 
 export function ModelSelector() {
   const [open, setOpen] = React.useState(false)

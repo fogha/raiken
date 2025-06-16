@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, AlertCircle, Code } from 'lucide-react';
-import { cn } from "@/core/common/utils";
+import { cn } from "@/lib/utils";
 import dynamic from 'next/dynamic';
 import { useTheme } from 'next-themes';
 
@@ -17,9 +17,10 @@ export interface TestScriptEditorProps {
   onChange: (value: string) => void;
   language?: 'typescript' | 'javascript' | 'json';
   error?: boolean;
+  hideHeader?: boolean;
 }
 
-export function TestScriptEditor({ value, onChange, language = 'typescript', error }: TestScriptEditorProps) {
+export function TestScriptEditor({ value, onChange, language = 'typescript', error, hideHeader = false }: TestScriptEditorProps) {
   const [isFocused, setIsFocused] = useState(false);
   const [isFormatting, setIsFormatting] = useState(false);
   const [formatSuccess, setFormatSuccess] = useState<boolean | null>(null);
@@ -150,41 +151,43 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
       "p-4 space-y-2 h-[calc(100vh-12rem)] flex flex-col",
       error && "border-destructive"
     )}>
-      <div className="flex justify-between items-center">
-        <div className="flex items-center">
-          <Code className="h-4 w-4 mr-2" />
-          <Label>{language === 'json' ? 'Test Configuration' : 'Test Script'}</Label>
-          <span className="ml-2 text-xs text-muted-foreground">({language.toUpperCase()})</span>
+      {!hideHeader && (
+        <div className="flex justify-between items-center">
+          <div className="flex items-center">
+            <Code className="h-4 w-4 mr-2" />
+            <Label>{language === 'json' ? 'Test Configuration' : 'Test Script'}</Label>
+            <span className="ml-2 text-xs text-muted-foreground">({language.toUpperCase()})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {formatSuccess !== null && (
+              <span className="text-sm animate-in fade-in slide-in-from-top-1" 
+                    style={{ color: formatSuccess ? 'green' : 'red' }}>
+                {formatSuccess ? (
+                  <span className="flex items-center">
+                    <CheckCircle className="h-4 w-4 mr-1" />
+                    Formatted
+                  </span>
+                ) : (
+                  <span className="flex items-center">
+                    <AlertCircle className="h-4 w-4 mr-1" />
+                    Format failed
+                  </span>
+                )}
+              </span>
+            )}
+            <Button
+              onClick={formatCode}
+              size="sm"
+              variant="outline"
+              disabled={isFormatting}
+              title="Format code (Ctrl+S/Cmd+S)"
+              aria-label="Format code"
+            >
+              {isFormatting ? 'Formatting...' : 'Format'}
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          {formatSuccess !== null && (
-            <span className="text-sm animate-in fade-in slide-in-from-top-1" 
-                  style={{ color: formatSuccess ? 'green' : 'red' }}>
-              {formatSuccess ? (
-                <span className="flex items-center">
-                  <CheckCircle className="h-4 w-4 mr-1" />
-                  Formatted
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  <AlertCircle className="h-4 w-4 mr-1" />
-                  Format failed
-                </span>
-              )}
-            </span>
-          )}
-          <Button
-            onClick={formatCode}
-            size="sm"
-            variant="outline"
-            disabled={isFormatting}
-            title="Format code (Ctrl+S/Cmd+S)"
-            aria-label="Format code"
-          >
-            {isFormatting ? 'Formatting...' : 'Format'}
-          </Button>
-        </div>
-      </div>
+      )}
       <div className="flex-grow relative border rounded-md overflow-hidden" style={{ height: 'calc(100vh - 20rem)' }}>
         {/* Monaco Editor with error handling */}
         <div className="h-full w-full">

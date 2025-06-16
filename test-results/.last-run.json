@@ -1,11 +1,9 @@
 {
   "status": "failed",
   "failedTests": [
-    "a30a6eba6312f6b87ea5-b06063a3e613764d08f8",
-    "a30a6eba6312f6b87ea5-274e97907a6e3638a22f",
-    "a30a6eba6312f6b87ea5-f53a5ad453cd33dc57d5",
-    "a30a6eba6312f6b87ea5-bfe080d6fe34297f494c",
-    "a30a6eba6312f6b87ea5-4a26ebd06a6b810edcc2",
-    "a30a6eba6312f6b87ea5-1eb159041d56409ed83c"
-  ]
+    "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts"
+  ],
+  "timestamp": "2025-06-16T08:05:09.514Z",
+  "error": "Test failed",
+  "resultFile": "arten_examples_app_test_7_51_11_am-2025-06-16T08-05-05-597Z.json"
 }

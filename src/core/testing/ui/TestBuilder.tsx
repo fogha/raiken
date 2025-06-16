@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { AlertTriangle, XCircle } from 'lucide-react';
+import { AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { DOMNode } from '@/types/dom';
 import { TestScriptEditor } from './TestScriptEditor';
-import { cn } from "@/core/common/utils";
+import { cn } from "@/lib/utils";
 import { useTestStore } from '@/store/testStore';
 import { useBrowserStore } from '@/store/browserStore';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -154,7 +154,14 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
                     isGenerating && "cursor-not-allowed opacity-50"
                   )}
                 >
-                  Generate Test
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Test'
+                  )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>

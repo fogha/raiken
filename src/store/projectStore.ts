@@ -12,7 +12,6 @@ interface ProjectState {
   domTree: DOMNode | null;
   
   // UI state
-  activeTab: 'test' | 'flow';
   sidebarCollapsed: boolean;
   
   // Test state
@@ -24,7 +23,6 @@ interface ProjectState {
   setLoadError: (error: string | null) => void;
   setSelectedNode: (node: DOMNode | null) => void;
   setDomTree: (tree: DOMNode | null) => void;
-  setActiveTab: (tab: 'test' | 'flow') => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setGeneratedTestScript: (script: string) => void;
   
@@ -39,7 +37,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadError: null,
   selectedNode: null,
   domTree: null,
-  activeTab: 'test',
   sidebarCollapsed: false,
   generatedTestScript: '',
   
@@ -49,7 +46,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   setLoadError: (error) => set({ loadError: error }),
   setSelectedNode: (node) => set({ selectedNode: node }),
   setDomTree: (tree) => set({ domTree: tree }),
-  setActiveTab: (tab) => set({ activeTab: tab }),
   setSidebarCollapsed: (collapsed) => set({ sidebarCollapsed: collapsed }),
   setGeneratedTestScript: (script) => set({ generatedTestScript: script }),
   

@@ -1,5 +1,5 @@
 import { OpenRouterService } from './openrouter.service';
-import { TestResult } from './test-executor';
+import { TestResult } from '@/types/test';
 import fs from 'fs';
 import path from 'path';
 
@@ -154,7 +154,6 @@ export class ReportsService {
         results: results.map(r => ({
           success: r.success,
           message: r.message,
-          durationMs: r.durationMs,
           timestamp: r.timestamp
         }))
       };

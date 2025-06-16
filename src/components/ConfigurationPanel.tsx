@@ -35,6 +35,39 @@ export function ConfigurationPanel() {
 
           <TabsContent value="execution" className="space-y-4">
             <div className="space-y-2">
+              <Label>Browser Engine</Label>
+              <Select 
+                value={config.execution.browserType}
+                onValueChange={(value: 'chromium' | 'firefox' | 'webkit') => 
+                  updateExecutionConfig({ browserType: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="chromium">Chromium (Default)</SelectItem>
+                  <SelectItem value="firefox">Firefox</SelectItem>
+                  <SelectItem value="webkit">WebKit (Safari)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Retry Count</Label>
+              <Input 
+                type="number"
+                min="0"
+                max="10"
+                value={config.execution.retries}
+                onChange={(e) => 
+                  updateExecutionConfig({ retries: parseInt(e.target.value) || 0 })}
+              />
+              <p className="text-xs text-muted-foreground">
+                Number of times to retry failed tests (0 = no retries)
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label>Execution Mode</Label>
               <Select 
                 value={config.execution.mode}

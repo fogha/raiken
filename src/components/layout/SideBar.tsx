@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Layout, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "../ui/button";
-import { cn } from "@/core/common/utils";
+import { cn } from "@/lib/utils";
 import { ChevronRight, ChevronDown } from 'lucide-react';
 
 import { DOMNode } from '@/types/dom';

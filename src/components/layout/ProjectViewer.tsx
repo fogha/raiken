@@ -1,14 +1,12 @@
 "use client"
 import { useEffect } from 'react';
 import { Button } from '../ui/button';
-import { TestTube, Code2, BookOpen, Github, Settings, FileText, Share2 } from 'lucide-react';
+import { TestTube, Code2, BookOpen, Github, Settings, FileText } from 'lucide-react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
 import SideBar from './SideBar';
 import { TestBuilder } from '@/core/testing/ui/TestBuilder';
-import { FlowEditor } from '../FlowEditor';
 import { PlaywrightBrowser } from '@/core/browser/ui/PlaywrightBrowser';
 import { ThemeToggle } from "../ui/theme-toggle";
-import { ModelSelector } from "../ui/model-selector";
 
 // Import DOMNode interface and helper functions
 import type { DOMNode } from '@/types/dom';
@@ -24,9 +22,7 @@ const ProjectViewer = () => {
     url,
     loadError,
     selectedNode,
-    activeTab,
     setSelectedNode,
-    setActiveTab,
     setDomTree,
     loadProject
   } = useProjectStore();
@@ -68,7 +64,7 @@ const ProjectViewer = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen bg-background">
       {/* Error toast for URL loading errors */}
       {loadError && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-50">
@@ -143,43 +139,26 @@ const ProjectViewer = () => {
                       </Button>
                       <ThemeToggle />
                     </nav>
-                    {/* Tab navigation */}
+                    {/* Tab navigation - removed Flow Studio tab */}
                     <div className="bg-muted border-b border-border h-10 flex items-center px-3">
                       <div className="flex gap-2 h-full">
                         <button
-                          onClick={() => setActiveTab('test')}
-                          className={`px-3 h-full text-sm flex items-center border-b-2 ${activeTab === 'test' ? 'border-primary font-medium' : 'border-transparent text-muted-foreground'
-                            }`}
+                          className="px-3 h-full text-sm flex items-center border-b-2 border-primary font-medium"
                         >
                           <TestTube className="h-4 w-4 mr-1.5" />
                           <span>Test Builder</span>
                         </button>
-                        <button
-                          onClick={() => setActiveTab('flow')}
-                          className={`px-3 h-full text-sm flex items-center border-b-2 ${activeTab === 'flow' ? 'border-primary font-medium' : 'border-transparent text-muted-foreground'
-                            }`}
-                        >
-                          <Share2 className="h-4 w-4 mr-1.5" />
-                          <span>Flow Studio</span>
-                        </button>
                       </div>
                     </div>
 
-                    {/* Tab content */}
+                    {/* Tab content - only Test Builder */}
                     <div className="flex-1 overflow-hidden">
-                      {activeTab === 'test' && (
-                        <div className="h-full overflow-auto px-2 pt-4 bg-background">
-                          <TestBuilder
-                            selectedNode={selectedNode}
-                            onTestGenerated={handleTestGenerated}
-                          />
-                        </div>
-                      )}
-                      {activeTab === 'flow' && (
-                        <div className="h-full overflow-auto bg-background">
-                          <FlowEditor />
-                        </div>
-                      )}
+                      <div className="h-full overflow-auto px-2 pt-4 bg-background">
+                        <TestBuilder
+                          selectedNode={selectedNode}
+                          onTestGenerated={handleTestGenerated}
+                        />
+                      </div>
                     </div>
                   </div>
                 </ResizablePanel>

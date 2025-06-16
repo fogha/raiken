@@ -1,0 +1,146 @@
+{
+  "testPath": "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+  "timestamp": "2025-06-16T08:05:09.514Z",
+  "success": false,
+  "results": {
+    "config": {
+      "configFile": "/Users/Armand/Documents/Code/arten/playwright.config.temp.ts",
+      "rootDir": "/Users/Armand/Documents/Code/arten",
+      "forbidOnly": true,
+      "fullyParallel": true,
+      "globalSetup": null,
+      "globalTeardown": null,
+      "globalTimeout": 0,
+      "grep": {},
+      "grepInvert": null,
+      "maxFailures": 0,
+      "metadata": {
+        "actualWorkers": 1
+      },
+      "preserveOutput": "always",
+      "reporter": [
+        [
+          "json"
+        ]
+      ],
+      "reportSlowTests": {
+        "max": 5,
+        "threshold": 300000
+      },
+      "quiet": false,
+      "projects": [
+        {
+          "outputDir": "/Users/Armand/Documents/Code/arten/test-results",
+          "repeatEach": 1,
+          "retries": 0,
+          "metadata": {
+            "actualWorkers": 1
+          },
+          "id": "chromium",
+          "name": "chromium",
+          "testDir": "/Users/Armand/Documents/Code/arten",
+          "testIgnore": [],
+          "testMatch": [
+            "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+          ],
+          "timeout": 30000
+        }
+      ],
+      "shard": null,
+      "updateSnapshots": "missing",
+      "updateSourceMethod": "patch",
+      "version": "1.51.1",
+      "workers": 1,
+      "webServer": null
+    },
+    "suites": [
+      {
+        "title": "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+        "file": "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+        "column": 0,
+        "line": 0,
+        "specs": [
+          {
+            "title": "Arten Examples App Test",
+            "ok": false,
+            "tags": [],
+            "tests": [
+              {
+                "timeout": 30000,
+                "annotations": [],
+                "expectedStatus": "passed",
+                "projectId": "chromium",
+                "projectName": "chromium",
+                "results": [
+                  {
+                    "workerIndex": 0,
+                    "parallelIndex": 0,
+                    "status": "failed",
+                    "duration": 2205,
+                    "error": {
+                      "message": "Error: locator.fill: Error: strict mode violation: locator('input') resolved to 4 elements:\n    1) <input value=\"\" type=\"text\" id=\"firstName\" name=\"firstName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'First name' })\n    2) <input value=\"\" type=\"text\" id=\"lastName\" name=\"lastName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Last name' })\n    3) <input value=\"\" id=\"email\" type=\"email\" name=\"email\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Email address' })\n    4) <input checked type=\"checkbox\" id=\"notifications\" name=\"notifications\" class=\"h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\"/> aka getByRole('checkbox', { name: 'Email notifications' })\n\nCall log:\n\u001b[2m  - waiting for locator('input')\u001b[22m\n",
+                      "stack": "Error: locator.fill: Error: strict mode violation: locator('input') resolved to 4 elements:\n    1) <input value=\"\" type=\"text\" id=\"firstName\" name=\"firstName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'First name' })\n    2) <input value=\"\" type=\"text\" id=\"lastName\" name=\"lastName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Last name' })\n    3) <input value=\"\" id=\"email\" type=\"email\" name=\"email\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Email address' })\n    4) <input checked type=\"checkbox\" id=\"notifications\" name=\"notifications\" class=\"h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\"/> aka getByRole('checkbox', { name: 'Email notifications' })\n\nCall log:\n\u001b[2m  - waiting for locator('input')\u001b[22m\n\n    at /Users/Armand/Documents/Code/arten/generated-tests/arten_examples_app_test_7_51_11_am.spec.ts:19:31",
+                      "location": {
+                        "file": "/Users/Armand/Documents/Code/arten/generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+                        "column": 31,
+                        "line": 19
+                      },
+                      "snippet": "\u001b[0m \u001b[90m 17 |\u001b[39m\n \u001b[90m 18 |\u001b[39m   \u001b[90m// Step 3: Type text\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 19 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'input'\u001b[39m)\u001b[33m.\u001b[39mfill(\u001b[32m'test input'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                               \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 20 |\u001b[39m\n \u001b[90m 21 |\u001b[39m   \u001b[90m// Step 4: Wait for 1000ms\u001b[39m\n \u001b[90m 22 |\u001b[39m   \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mwaitForTimeout(\u001b[35m1000\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                    },
+                    "errors": [
+                      {
+                        "location": {
+                          "file": "/Users/Armand/Documents/Code/arten/generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+                          "column": 31,
+                          "line": 19
+                        },
+                        "message": "Error: locator.fill: Error: strict mode violation: locator('input') resolved to 4 elements:\n    1) <input value=\"\" type=\"text\" id=\"firstName\" name=\"firstName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'First name' })\n    2) <input value=\"\" type=\"text\" id=\"lastName\" name=\"lastName\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Last name' })\n    3) <input value=\"\" id=\"email\" type=\"email\" name=\"email\" class=\"mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm\"/> aka getByRole('textbox', { name: 'Email address' })\n    4) <input checked type=\"checkbox\" id=\"notifications\" name=\"notifications\" class=\"h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500\"/> aka getByRole('checkbox', { name: 'Email notifications' })\n\nCall log:\n\u001b[2m  - waiting for locator('input')\u001b[22m\n\n\n  17 |\n  18 |   // Step 3: Type text\n> 19 |   await page.locator('input').fill('test input');\n     |                               ^\n  20 |\n  21 |   // Step 4: Wait for 1000ms\n  22 |   await page.waitForTimeout(1000);\n    at /Users/Armand/Documents/Code/arten/generated-tests/arten_examples_app_test_7_51_11_am.spec.ts:19:31"
+                      }
+                    ],
+                    "stdout": [],
+                    "stderr": [],
+                    "retry": 0,
+                    "startTime": "2025-06-16T08:05:07.140Z",
+                    "attachments": [
+                      {
+                        "name": "screenshot",
+                        "contentType": "image/png",
+                        "path": "/Users/Armand/Documents/Code/arten/test-results/generated-tests-arten_exam-5930e-_am-Arten-Examples-App-Test-chromium/test-failed-1.png"
+                      },
+                      {
+                        "name": "_prompt-0",
+                        "contentType": "text/markdown",
+                        "body": "IyBJbnN0cnVjdGlvbnMKCi0gRm9sbG93aW5nIFBsYXl3cmlnaHQgdGVzdCBmYWlsZWQuCi0gRXhwbGFpbiB3aHksIGJlIGNvbmNpc2UsIHJlc3BlY3QgUGxheXdyaWdodCBiZXN0IHByYWN0aWNlcy4KLSBQcm92aWRlIGEgc25pcHBldCBvZiBjb2RlIHdpdGggdGhlIGZpeCwgaWYgcG9zc2libGUuCgojIFRlc3QgaW5mbwoKLSBOYW1lOiBBcnRlbiBFeGFtcGxlcyBBcHAgVGVzdAotIExvY2F0aW9uOiAvVXNlcnMvQXJtYW5kL0RvY3VtZW50cy9Db2RlL2FydGVuL2dlbmVyYXRlZC10ZXN0cy9hcnRlbl9leGFtcGxlc19hcHBfdGVzdF83XzUxXzExX2FtLnNwZWMudHM6ODo1CgojIEVycm9yIGRldGFpbHMKCmBgYApFcnJvcjogbG9jYXRvci5maWxsOiBFcnJvcjogc3RyaWN0IG1vZGUgdmlvbGF0aW9uOiBsb2NhdG9yKCdpbnB1dCcpIHJlc29sdmVkIHRvIDQgZWxlbWVudHM6CiAgICAxKSA8aW5wdXQgdmFsdWU9IiIgdHlwZT0idGV4dCIgaWQ9ImZpcnN0TmFtZSIgbmFtZT0iZmlyc3ROYW1lIiBjbGFzcz0ibXQtMSBibG9jayB3LWZ1bGwgcm91bmRlZC1tZCBib3JkZXItZ3JheS0zMDAgc2hhZG93LXNtIGZvY3VzOmJvcmRlci1pbmRpZ28tNTAwIGZvY3VzOnJpbmctaW5kaWdvLTUwMCBzbTp0ZXh0LXNtIi8+IGFrYSBnZXRCeVJvbGUoJ3RleHRib3gnLCB7IG5hbWU6ICdGaXJzdCBuYW1lJyB9KQogICAgMikgPGlucHV0IHZhbHVlPSIiIHR5cGU9InRleHQiIGlkPSJsYXN0TmFtZSIgbmFtZT0ibGFzdE5hbWUiIGNsYXNzPSJtdC0xIGJsb2NrIHctZnVsbCByb3VuZGVkLW1kIGJvcmRlci1ncmF5LTMwMCBzaGFkb3ctc20gZm9jdXM6Ym9yZGVyLWluZGlnby01MDAgZm9jdXM6cmluZy1pbmRpZ28tNTAwIHNtOnRleHQtc20iLz4gYWthIGdldEJ5Um9sZSgndGV4dGJveCcsIHsgbmFtZTogJ0xhc3QgbmFtZScgfSkKICAgIDMpIDxpbnB1dCB2YWx1ZT0iIiBpZD0iZW1haWwiIHR5cGU9ImVtYWlsIiBuYW1lPSJlbWFpbCIgY2xhc3M9Im10LTEgYmxvY2sgdy1mdWxsIHJvdW5kZWQtbWQgYm9yZGVyLWdyYXktMzAwIHNoYWRvdy1zbSBmb2N1czpib3JkZXItaW5kaWdvLTUwMCBmb2N1czpyaW5nLWluZGlnby01MDAgc206dGV4dC1zbSIvPiBha2EgZ2V0QnlSb2xlKCd0ZXh0Ym94JywgeyBuYW1lOiAnRW1haWwgYWRkcmVzcycgfSkKICAgIDQpIDxpbnB1dCBjaGVja2VkIHR5cGU9ImNoZWNrYm94IiBpZD0ibm90aWZpY2F0aW9ucyIgbmFtZT0ibm90aWZpY2F0aW9ucyIgY2xhc3M9ImgtNCB3LTQgcm91bmRlZCBib3JkZXItZ3JheS0zMDAgdGV4dC1pbmRpZ28tNjAwIGZvY3VzOnJpbmctaW5kaWdvLTUwMCIvPiBha2EgZ2V0QnlSb2xlKCdjaGVja2JveCcsIHsgbmFtZTogJ0VtYWlsIG5vdGlmaWNhdGlvbnMnIH0pCgpDYWxsIGxvZzoKICAtIHdhaXRpbmcgZm9yIGxvY2F0b3IoJ2lucHV0JykKCiAgICBhdCAvVXNlcnMvQXJtYW5kL0RvY3VtZW50cy9Db2RlL2FydGVuL2dlbmVyYXRlZC10ZXN0cy9hcnRlbl9leGFtcGxlc19hcHBfdGVzdF83XzUxXzExX2FtLnNwZWMudHM6MTk6MzEKYGBgCgojIFBhZ2Ugc25hcHNob3QKCmBgYHlhbWwKLSBuYXZpZ2F0aW9uOgogIC0gbGluayAiVXNlciBGb3JtIgogIC0gbGluayAiVG9kbyBMaXN0IgotIG1haW46CiAgLSBoZWFkaW5nICJVc2VyIEluZm9ybWF0aW9uIiBbbGV2ZWw9M10KICAtIHRleHQ6IEZpcnN0IG5hbWUKICAtIHRleHRib3ggIkZpcnN0IG5hbWUiCiAgLSB0ZXh0OiBMYXN0IG5hbWUKICAtIHRleHRib3ggIkxhc3QgbmFtZSIKICAtIHRleHQ6IEVtYWlsIGFkZHJlc3MKICAtIHRleHRib3ggIkVtYWlsIGFkZHJlc3MiCiAgLSB0ZXh0OiBSb2xlCiAgLSBjb21ib2JveCAiUm9sZSI6CiAgICAtIG9wdGlvbiAiVXNlciIgW3NlbGVjdGVkXQogICAgLSBvcHRpb24gIkFkbWluIgogICAgLSBvcHRpb24gIk1hbmFnZXIiCiAgLSBjaGVja2JveCAiRW1haWwgbm90aWZpY2F0aW9ucyIgW2NoZWNrZWRdCiAgLSB0ZXh0OiBFbWFpbCBub3RpZmljYXRpb25zCiAgLSBwYXJhZ3JhcGg6IEdldCBub3RpZmllZCB3aGVuIHNvbWVvbmUgcG9zdHMgYSBjb21tZW50LgogIC0gYnV0dG9uICJTYXZlIgpgYGAKCiMgVGVzdCBzb3VyY2UKCmBgYHRzCiAgIDEgfAogICAyIHwgLyoqCiAgIDMgfCAgKiBBcnRlbiBHZW5lcmF0ZWQgVGVzdAogICA0IHwgICogR2VuZXJhdGVkIG9uOiAyMDI1LTA2LTE2VDA2OjUxOjExLjE3NFoKICAgNSB8ICAqLwogICA2IHwgaW1wb3J0IHsgdGVzdCwgZXhwZWN0IH0gZnJvbSAnQHBsYXl3cmlnaHQvdGVzdCc7CiAgIDcgfAogICA4IHwgdGVzdCgnQXJ0ZW4gRXhhbXBsZXMgQXBwIFRlc3QnLCBhc3luYyAoeyBwYWdlIH0pID0+IHsKICAgOSB8ICAgLy8gRGVmYXVsdCB0aW1lb3V0IGZvciBhbGwgb3BlcmF0aW9ucwogIDEwIHwgICBwYWdlLnNldERlZmF1bHRUaW1lb3V0KDMwMDAwKTsKICAxMSB8ICAgCiAgMTIgfCAgIC8vIFN0ZXAgMTogTmF2aWdhdGUgdG8gVVJMCiAgMTMgfCAgIGF3YWl0IHBhZ2UuZ290bygnaHR0cDovL2xvY2FsaG9zdDozMDAyJyk7CiAgMTQgfAogIDE1IHwgICAvLyBTdGVwIDI6IFdhaXQgZm9yIDIwMDBtcwogIDE2IHwgICBhd2FpdCBwYWdlLndhaXRGb3JUaW1lb3V0KDIwMDApOwogIDE3IHwKICAxOCB8ICAgLy8gU3RlcCAzOiBUeXBlIHRleHQKPiAxOSB8ICAgYXdhaXQgcGFnZS5sb2NhdG9yKCdpbnB1dCcpLmZpbGwoJ3Rlc3QgaW5wdXQnKTsKICAgICB8ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIF4gRXJyb3I6IGxvY2F0b3IuZmlsbDogRXJyb3I6IHN0cmljdCBtb2RlIHZpb2xhdGlvbjogbG9jYXRvcignaW5wdXQnKSByZXNvbHZlZCB0byA0IGVsZW1lbnRzOgogIDIwIHwKICAyMSB8ICAgLy8gU3RlcCA0OiBXYWl0IGZvciAxMDAwbXMKICAyMiB8ICAgYXdhaXQgcGFnZS53YWl0Rm9yVGltZW91dCgxMDAwKTsKICAyMyB8CiAgMjQgfCAgIC8vIFN0ZXAgNTogQ2xpY2sgZWxlbWVudAogIDI1IHwgICBhd2FpdCBwYWdlLmxvY2F0b3IoJ1B1cnBsZSBidXR0b24gd2l0aCBzYXZlIHdyaXR0ZW4gb24gaXQnKS5jbGljayh7IGZvcmNlOiBmYWxzZSB9KTsKICAyNiB8ICAgCiAgMjcgfCAgIC8vIEFzc2VydGlvbiAxOiBVbmtub3duIGVsZW1lbnQgY29uZGl0aW9uICdBbGwgdGhlIGlucHV0cyBzaG91bGQgYmUgdmlzaWJsZScKICAyOCB8IH0pOwogIDI5IHwgICAKYGBg"
+                      }
+                    ],
+                    "errorLocation": {
+                      "file": "/Users/Armand/Documents/Code/arten/generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+                      "column": 31,
+                      "line": 19
+                    }
+                  }
+                ],
+                "status": "unexpected"
+              }
+            ],
+            "id": "d014b76c50dd5d21b185-cde18408580add3ccd2b",
+            "file": "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts",
+            "line": 8,
+            "column": 5
+          }
+        ]
+      }
+    ],
+    "errors": [],
+    "stats": {
+      "startTime": "2025-06-16T08:05:06.663Z",
+      "duration": 2833.715,
+      "expected": 0,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    }
+  },
+  "duration": 3917,
+  "resultFile": "arten_examples_app_test_7_51_11_am-2025-06-16T08-05-05-597Z.json"
+}

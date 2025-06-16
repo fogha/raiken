@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "playwright test",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "test:report": "playwright show-report test-results/html-report",
+    "test:single": "node scripts/run-test.js"
   },
   "dependencies": {
     "@langchain/core": "^0.3.40",
@@ -40,6 +45,7 @@
     "@radix-ui/react-toggle-group": "^1.1.2",
     "@radix-ui/react-tooltip": "^1.1.8",
     "@shadcn/ui": "^0.0.4",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.8.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -63,6 +69,7 @@
     "shadcn-ui": "^0.9.4",
     "tailwind-merge": "^3.0.2",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^11.1.0",
     "zod": "^3.24.2",
     "zustand": "^5.0.3"
   },
