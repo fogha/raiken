@@ -7,8 +7,14 @@ export interface TestExecutorConfig {
   outputDir?: string;
 }
 
+export interface TestGenerationInput {
+  prompt: string;
+  domTree?: any;
+  currentUrl?: string;
+}
+
 export interface TestExecutor {
-  generateScript: (prompt: any) => Promise<string>;
+  generateScript: (input: TestGenerationInput | any) => Promise<string>;
 }
 
 /**
@@ -21,8 +27,8 @@ export function getTestExecutor(config: TestExecutorConfig): TestExecutor {
   });
 
   return {
-    generateScript: async (prompt: any): Promise<string> => {
-      return await openRouterService.generateTestScript(prompt);
+    generateScript: async (input: TestGenerationInput | any): Promise<string> => {
+      return await openRouterService.generateTestScript(input);
     }
   };
 } 

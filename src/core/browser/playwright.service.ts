@@ -32,10 +32,7 @@ export class PlaywrightService {
     // Check if browser already exists for this script
     if (this.browsers.has(scriptId)) return;
     
-    try {
-      console.log(`[Arten] Initializing ${browserType} browser for script ${scriptId}`);
-      
-      // Launch browser with the specified headless setting
+    try {      
       console.log(`[Arten] Launching ${browserType} browser with headless=${headless} for script ${scriptId}`);
       const browser = await (browserType === 'firefox' 
         ? firefox.launch({ headless }) 
@@ -111,6 +108,17 @@ export class PlaywrightService {
         function extractNode(node: Node | null, maxDepth = 15, currentDepth = 0): any {
           if (!node || currentDepth > maxDepth) return null;
           
+          // Helper function to sanitize strings for JSON serialization
+          function sanitizeString(str: string): string {
+            if (!str) return '';
+            return str
+              .replace(/[\x00-\x1F\x7F-\x9F]/g, '') // Remove control characters
+              .replace(/\\/g, '\\\\') // Escape backslashes
+              .replace(/"/g, '\\"') // Escape quotes
+              .replace(/\s+/g, ' ') // Normalize whitespace
+              .trim();
+          }
+          
           // Create basic node object with safe property access
           const nodeObj: {
             nodeType: number,
@@ -126,9 +134,9 @@ export class PlaywrightService {
           } = {
             nodeType: node.nodeType || 0,
             tagName: node.nodeType === 1 && (node as Element).tagName ? (node as Element).tagName.toLowerCase() : '#text',
-            id: node.nodeType === 1 && (node as Element).id ? (node as Element).id : '',
-            className: node.nodeType === 1 && typeof (node as Element).className === 'string' ? (node as Element).className : '',
-            textContent: node.textContent ? node.textContent.trim().substring(0, 200) : '',
+            id: node.nodeType === 1 && (node as Element).id ? sanitizeString((node as Element).id) : '',
+            className: node.nodeType === 1 && typeof (node as Element).className === 'string' ? sanitizeString((node as Element).className) : '',
+            textContent: node.textContent ? sanitizeString(node.textContent).substring(0, 200) : '',
             attributes: {},
             path: '',
             children: []
@@ -139,9 +147,9 @@ export class PlaywrightService {
             try {
               for (let i = 0; i < (node as Element).attributes.length; i++) {
                 const attr = (node as Element).attributes[i];
-                if (attr && attr.name) {
-                  nodeObj.attributes[attr.name] = attr.value || '';
-                }
+                                  if (attr && attr.name) {
+                    nodeObj.attributes[sanitizeString(attr.name)] = sanitizeString(attr.value || '');
+                  }
               }
             } catch (e) {
               console.warn('Error extracting attributes:', e);
@@ -305,26 +313,6 @@ export class PlaywrightService {
           break;
         case 'screenshot':
           return await this.page.screenshot();
-        case 'highlight':
-          // Highlight the element by running a script to add a temporary outline
-          await this.page.evaluate((selector) => {
-            const element = document.querySelector(selector);
-            if (element) {
-              // Cast to HTMLElement to access style properties
-              const htmlElement = element as HTMLElement;
-              const originalOutline = htmlElement.style.outline;
-              const originalZIndex = htmlElement.style.zIndex;
-              
-              htmlElement.style.outline = '3px solid red';
-              htmlElement.style.zIndex = '9999';
-              
-              setTimeout(() => {
-                htmlElement.style.outline = originalOutline;
-                htmlElement.style.zIndex = originalZIndex;
-              }, 1500);
-            }
-          }, action.selector);
-          break;
         case 'edit':
           // Edit element properties like text content, id, or class
           if (!action.property) {

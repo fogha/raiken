@@ -5,7 +5,7 @@
 ```
 src/core/
 ├── browser/                  # Browser automation functionality
-│   ├── playwright.service.ts  # Playwright browser automation with highlight & test support
+│   ├── playwright.service.ts  # Playwright browser automation with test support
 │   ├── ui/                    # Browser-related UI components
 │   │   └── PlaywrightBrowser.tsx # DOM viewer & Test execution UI with webpage preview
 │   └── index.ts              # Exports
@@ -119,7 +119,7 @@ src/types/
 
 2. **DOM Extraction & Visualization**
    - Server-side DOM extraction via Playwright (headless mode)
-   - DOM tree viewer with element highlighting
+   - DOM tree viewer for element selection
    - JSON view for detailed inspection
    - Real-time DOM updates
 
@@ -133,7 +133,7 @@ src/types/
 4. **Web Application Preview**
    - Live iframe preview of the target application
    - Synchronized with DOM extraction
-   - Highlights selected elements for visual feedback
+   - Element selection for testing
    - Status-aware loading states
 
 ## State Flow
@@ -167,6 +167,5 @@ src/types/
    Example: Selecting Element
    - Update status (ELEMENT_SELECTED)
    - Update selected node
-   - Highlight element
    - Update UI components
 

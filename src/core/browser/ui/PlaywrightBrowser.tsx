@@ -50,10 +50,8 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   // Local state for UI-only concerns
   const [inputUrl, setInputUrl] = React.useState<string>(initialUrl);
   const [error, setError] = React.useState<string | null>(null);
-  const [generatedTest, setGeneratedTest] = React.useState<string>(initialGeneratedTest);
   const [selectedElement, setSelectedElement] = React.useState<DOMNode | null>(null);
   const [domTree, setDomTree] = React.useState<DOMNode | null>(null);
-  const [editorRef, setEditorRef] = React.useState<{ addNewTab: (content: string, name: string) => string } | null>(null);
 
   // Use the store URL or fallback to the initialUrl prop
   const currentUrl = storeUrl || initialUrl;

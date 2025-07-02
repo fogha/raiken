@@ -170,7 +170,16 @@ export const useAppStore = create<AppState>()(
         removeTab: (tabId: string) => {
           const { testing } = get();
           const newTabs = testing.tabs.filter(tab => tab.id !== tabId);
-          const newActiveTabId = testing.activeTabId === tabId && newTabs.length > 0 ? newTabs[0].id : testing.activeTabId;
+          
+          // Determine the new active tab ID
+          let newActiveTabId: string | null;
+          if (testing.activeTabId === tabId) {
+            // If we're closing the active tab
+            newActiveTabId = newTabs.length > 0 ? newTabs[newTabs.length - 1].id : null;
+          } else {
+            // If we're closing a non-active tab, keep the current active tab
+            newActiveTabId = testing.activeTabId;
+          }
           
           return set(state => ({
             testing: { 

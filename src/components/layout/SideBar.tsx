@@ -1,6 +1,5 @@
 "use client"
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Layout, PanelLeftClose, PanelLeft } from "lucide-react";
 import { Button } from "../ui/button";
 import { cn } from "@/lib/utils";
@@ -19,47 +18,11 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
   onSelect: (node: Element | DOMNode) => void;
 }) => {
   const { setSelectedNode } = useProjectStore();
-  const [isExpanded, setIsExpanded] = useState(depth < 2); // Keep local UI state
+  const [isExpanded, setIsExpanded] = useState(depth < 2);
 
   const hasChildren = node.children && node.children.length > 0;
 
-  const highlightElement = () => {
-    // Find all iframes in the document (including ones inside SimpleBrowser)
-    const iframes = document.querySelectorAll('iframe');
-    
-    // Message to send to highlight the element
-    const message = {
-      type: 'HIGHLIGHT_ELEMENT',
-      payload: {
-        tagName: node.tagName,
-        id: node.id,
-        className: node.className
-      }
-    };
-    
-    // Send to all iframes to ensure it reaches the correct one
-    iframes.forEach(iframe => {
-      if (iframe?.contentWindow) {
-        try {
-          iframe.contentWindow.postMessage(message, '*');
-        } catch (e) {
-          console.error('[Arten] Error sending highlight message:', e);
-        }
-      }
-    });
-    
-    // Also dispatch a custom event that SimpleBrowser can listen for
-    window.dispatchEvent(new CustomEvent('arten:highlight-element', { detail: message.payload }));
-  };
 
-  const clearHighlight = () => {
-    const iframe = document.querySelector('iframe') as HTMLIFrameElement;
-    if (!iframe?.contentWindow) return;
-
-    iframe.contentWindow.postMessage({
-      type: 'CLEAR_HIGHLIGHT'
-    }, '*');
-  };
 
   return (
     <div>
@@ -72,10 +35,7 @@ const TreeNode = ({ node, depth = 0, onSelect }: {
         onClick={() => {
           onSelect(node);
           setSelectedNode(node);
-          highlightElement();
         }}
-        onMouseEnter={highlightElement}
-        onMouseLeave={clearHighlight}
       >
         {hasChildren && (
           <button 

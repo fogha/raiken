@@ -1,13 +1,13 @@
 "use client"
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useBrowserStore } from '@/store/browserStore';
 import { useTestStore } from '@/store/testStore';
 import { TestScriptConfig, TestTab as TypesTestTab } from '@/types/test';
 import { TestScriptEditor } from './TestScriptEditor';
-import { Play, Save, Loader2, Plus, FileText } from 'lucide-react';
+import { Play, Save, Loader2, Plus, FileText, X } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 
 // Define our own TestTab that uses the browserStore TestResult type
 interface TestTab extends TypesTestTab {
@@ -24,7 +24,6 @@ export function TabbedTestEditor() {
   const {
     editorTabs: tabs,
     activeTabId,
-    setEditorTabs,
     setActiveTabId,
     addEditorTab,
     updateEditorTab,
@@ -34,10 +33,14 @@ export function TabbedTestEditor() {
   const { runTest, isRunning } = useTestStore();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
+  // Get the active tab data - safely handle null case
+  const activeTab = activeTabId ? tabs.find(tab => tab.id === activeTabId) : null;
+
   // Handle tab operations
   const handleAddTab = () => {
+    const _uuid = uuidv4();
     const newTab: TestTab = {
-      id: Date.now().toString(),
+      id: _uuid,
       name: `New Test ${tabs.length + 1}`,
       content: '',
       language: 'typescript',
@@ -104,9 +107,6 @@ export function TabbedTestEditor() {
     await runTest(testPath);
   };
 
-  // Get the active tab data - safely handle null case
-  const activeTab = activeTabId ? tabs.find(tab => tab.id === activeTabId) : null;
-
   // Show empty state when no tabs
   if (tabs.length === 0) {
     return (
@@ -114,7 +114,7 @@ export function TabbedTestEditor() {
         {/* Header with Save/Run buttons (disabled) */}
         <div className="flex items-center justify-between gap-2 p-2 bg-muted/30">
           <div className="flex items-center gap-1">
-            <TabsList className="flex items-center">
+            <div className="flex items-center">
               <Button
                 variant="ghost"
                 size="icon"
@@ -123,7 +123,7 @@ export function TabbedTestEditor() {
               >
                 <Plus className="h-4 w-4" />
               </Button>
-            </TabsList>
+            </div>
           </div>
           <div className="flex gap-2">
             <Button
@@ -167,25 +167,30 @@ export function TabbedTestEditor() {
       {/* Permanent Save and Run buttons at the top */}
       <div className="flex items-center justify-between gap-2 p-2 bg-muted/30">
         <div className="flex items-center gap-1">
-          <TabsList className="flex items-center">
+          <div className="flex items-center bg-muted rounded-md p-1">
             {tabs.map(tab => (
-              <TabsTrigger
+              <button
                 key={tab.id}
-                value={tab.id}
                 onClick={() => setActiveTabId(tab.id)}
-                className="relative border gap-4"
+                className={`
+                  relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors
+                  ${activeTabId === tab.id 
+                    ? 'bg-background text-foreground shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'
+                  }
+                `}
               >
                 {tab.name}
                 <span
-                  className="hover:bg-gray-200 rounded cursor-pointer"
+                  className="ml-1 hover:bg-destructive/20 hover:text-destructive rounded-sm px-1 transition-colors"
                   onClick={(e) => {
                     e.stopPropagation();
                     removeEditorTab(tab.id);
                   }}
                 >
-                  ×
+                  <X className="h-4 w-4" />
                 </span>
-              </TabsTrigger>
+              </button>
             ))}
             
             {/* + button right after the tabs */}
@@ -193,11 +198,11 @@ export function TabbedTestEditor() {
               variant="ghost"
               size="icon"
               onClick={handleAddTab}
-              className="border ml-2 h-8 w-8"
+              className="ml-2 h-8 w-8"
             >
               <Plus className="h-4 w-4" />
             </Button>
-          </TabsList>
+          </div>
         </div>
         <div className="flex gap-2">
         <Button
@@ -228,21 +233,21 @@ export function TabbedTestEditor() {
         </div>
       </div>
 
+      {/* Tab content area */}
       <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTabId || ''} className="h-full">
-          {tabs.map(tab => (
-            <TabsContent key={tab.id} value={tab.id} className="h-full">
-              <div className="h-full">
-                <TestScriptEditor
-                  value={tab.content}
-                  onChange={(newContent) => updateEditorTab(tab.id, { content: newContent })}
-                  language={tab.language}
-                  hideHeader={true}
-                />
-              </div>
-            </TabsContent>
-          ))}
-        </Tabs>
+        {tabs.map(tab => (
+          <div 
+            key={tab.id} 
+            className={`h-full ${activeTabId === tab.id ? 'block' : 'hidden'}`}
+          >
+            <TestScriptEditor
+              value={tab.content}
+              onChange={(newContent) => updateEditorTab(tab.id, { content: newContent })}
+              language={tab.language}
+              hideHeader={true}
+            />
+          </div>
+        ))}
       </div>
     </div>
   );

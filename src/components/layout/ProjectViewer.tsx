@@ -1,7 +1,6 @@
 "use client"
-import { useEffect } from 'react';
 import { Button } from '../ui/button';
-import { TestTube, Code2, BookOpen, Github, Settings, FileText } from 'lucide-react';
+import { TestTube, BookOpen, Github, Settings } from 'lucide-react';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resizable';
 import SideBar from './SideBar';
 import { TestBuilder } from '@/core/testing/ui/TestBuilder';
@@ -24,7 +23,6 @@ const ProjectViewer = () => {
     selectedNode,
     setSelectedNode,
     setDomTree,
-    loadProject
   } = useProjectStore();
 
   const { status, setStatus } = useBrowserStore();

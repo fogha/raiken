@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { DOMNode } from '@/types/dom';
 
 export type StatusType = 'idle' | 'loading' | 'success' | 'error';
 
@@ -21,7 +20,6 @@ export type SystemAction =
   | 'DOM_UPDATED'
   | 'EXTRACTING_DOM'
   | 'ELEMENT_SELECTED'
-  | 'ELEMENT_HIGHLIGHTED'
   // Test actions
   | 'GENERATING_TEST'
   | 'TEST_GENERATED'
@@ -85,7 +83,7 @@ interface BrowserState {
   addEditorTab: (tab: TestTab) => void;
   updateEditorTab: (id: string, updates: Partial<TestTab>) => void;
   removeEditorTab: (id: string) => void;
-  
+
   reset: () => void;
 }
 
@@ -148,6 +146,6 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
       activeTabId: state.activeTabId === id ? (newTabs[0]?.id || null) : state.activeTabId
     };
   }),
-  
+
   reset: () => set(initialState)
 })); 

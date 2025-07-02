@@ -15,7 +15,7 @@ export async function POST(req: Request) {
     }
     
     // Extract and validate test specification from request body
-    const { prompt } = await req.json();
+    const { prompt, domTree } = await req.json();
     
     if (!prompt) {
       return Response.json({ 
@@ -60,8 +60,11 @@ export async function POST(req: Request) {
       outputDir: './test-results'
     });
     
-    // Generate the test script
-    const script = await executor.generateScript(prompt);
+    // Generate the test script with DOM context
+    const script = await executor.generateScript({
+      prompt,
+      domTree
+    });
     
     // Return the generated script
     return new Response(script, {

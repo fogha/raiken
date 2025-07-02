@@ -45,3 +45,5 @@ next-env.d.ts
 
 # Generated test scripts
 /generated-tests/
+/test-results/
+/test-results/*

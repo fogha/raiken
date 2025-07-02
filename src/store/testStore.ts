@@ -54,6 +54,7 @@ interface TestState {
   // Complex actions
   generateTest: () => Promise<void>;
   runTest: (testPath?: string) => Promise<void>;
+  saveTest: () => Promise<void>;
   loadTestFiles: () => Promise<void>;
 }
 
@@ -89,14 +90,22 @@ export const useTestStore = create<TestState>((set, get) => ({
     state.setGenerationError(null);
 
     try {
-      console.log('[Arten] Sending request to /api/generate-test endpoint');
+      // Get DOM context from project store
+      const { useProjectStore } = await import('./projectStore');
+      const projectState = useProjectStore.getState();
+      const domTree = projectState.domTree;
+      const currentUrl = projectState.url;
+
+      console.log('[Arten] Sending request to /api/generate-test endpoint with DOM context');
       const response = await fetch('/api/generate-test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prompt: state.jsonTestScript
+          prompt: state.jsonTestScript,
+          domTree: domTree,
+          currentUrl: currentUrl
         }),
       });
 
@@ -108,61 +117,9 @@ export const useTestStore = create<TestState>((set, get) => ({
       const generatedScript = await response.text();
       state.addGeneratedTest(generatedScript);
 
-      try {
-        const testSpec = JSON.parse(state.jsonTestScript);
-        const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
-        const testName = testSpec.name ? `${testSpec.name} ${timestamp}` : `Generated Test ${timestamp}`;
-        const runnableScript = convertToRunnableScript(testSpec);
-        
-        // Save the test script to the generated-tests folder via API
-        const saveResponse = await fetch('/api/save-test', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: testName,
-            content: runnableScript
-          }),
-        });
+      // Call the saveTest method to save and create a new tab
+      await state.saveTest();
 
-        if (!saveResponse.ok) {
-          const saveError = await saveResponse.json();
-          console.warn('[Arten] Failed to save test script:', saveError.error);
-        } else {
-          const saveResult = await saveResponse.json();
-          console.log('[Arten] Test script saved to:', saveResult.filePath);
-        }
-        
-        // Add to test scripts array
-        state.addTestScript(runnableScript);
-        
-        // Create a new tab in the browser store
-        const browserStore = useBrowserStore.getState();
-        const newTab = {
-          id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-          name: testName,
-          content: runnableScript,
-          language: 'typescript' as const,
-          config: {
-            headless: true,
-            browserType: 'chromium' as const
-          }
-        };
-        
-        browserStore.addEditorTab(newTab);
-        
-        // Switch to Tests tab after a short delay to ensure UI is ready
-        setTimeout(() => {
-          const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
-          if (testsTabTrigger) {
-            console.log('[Arten] Switching to Tests tab');
-            testsTabTrigger.click();
-          }
-        }, 100);
-      } catch (scriptError) {
-        console.error('[Arten] Error creating runnable script:', scriptError);
-      }
     } catch (error) {
       console.error('[Arten] Test generation failed:', error);
       state.setGenerationError(error instanceof Error ? error.message : String(error));
@@ -211,6 +168,65 @@ export const useTestStore = create<TestState>((set, get) => ({
       console.error('Test execution failed:', error);
     } finally {
       state.setIsRunning(false);
+    }
+  },
+
+  saveTest: async() => {
+    const state = get();
+    try {
+      const testSpec = JSON.parse(state.jsonTestScript);
+      const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
+      const testName = testSpec.name ? `${testSpec.name} ${timestamp}` : `Generated Test ${timestamp}`;
+      const runnableScript = convertToRunnableScript(testSpec);
+      
+      // Save the test script to the generated-tests folder via API
+      const saveResponse = await fetch('/api/save-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: testName,
+          content: runnableScript
+        }),
+      });
+
+      if (!saveResponse.ok) {
+        const saveError = await saveResponse.json();
+        console.warn('[Arten] Failed to save test script:', saveError.error);
+      } else {
+        const saveResult = await saveResponse.json();
+        console.log('[Arten] Test script saved to:', saveResult.filePath);
+      }
+      
+      // Add to test scripts array
+      state.addTestScript(runnableScript);
+      
+      // Create a new tab in the browser store
+      const browserStore = useBrowserStore.getState();
+      const newTab = {
+        id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        name: testName,
+        content: runnableScript,
+        language: 'typescript' as const,
+        config: {
+          headless: true,
+          browserType: 'chromium' as const
+        }
+      };
+      
+      browserStore.addEditorTab(newTab);
+      
+      // Switch to Tests tab after a short delay to ensure UI is ready
+      setTimeout(() => {
+        const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
+        if (testsTabTrigger) {
+          console.log('[Arten] Switching to Tests tab');
+          testsTabTrigger.click();
+        }
+      }, 100);
+    } catch (scriptError) {
+      console.error('[Arten] Error creating runnable script:', scriptError);
     }
   },
 

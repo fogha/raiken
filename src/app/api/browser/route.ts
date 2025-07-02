@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     // Get request body and log it for debugging
     const requestBody = await request.json();
     console.log('API Request Body:', requestBody);
-    const { action, url, script, selector, value, type, property } = requestBody;
+    const { action, url, script, selector, value, type, property, scriptId, config } = requestBody;
     console.log('Parsed params:', { action, url, selector, type, property });
     
     if (action === 'initialize') {
@@ -75,8 +75,7 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    if (action === 'runTest' && script) {
-      const { scriptId, config } = requestBody;
+        if (action === 'runTest' && script) {
       console.log(`[Arten API] Running test script for ID ${scriptId || 'default'} with config:`, config);
       
       // Run test with script ID and configuration if provided
@@ -91,8 +90,6 @@ export async function POST(request: NextRequest) {
     
     if (action === 'close') {
       // Check if a specific script ID was provided
-      const { scriptId } = requestBody;
-      
       if (scriptId) {
         console.log(`[Arten API] Closing browser for script ${scriptId}`);
         await PlaywrightService.close(scriptId);
