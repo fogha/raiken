@@ -4,6 +4,9 @@ export interface TestConfig {
     endpoint?: string;
     saveTests: boolean;
     realTimeResults: boolean;
+    browserType: 'chromium' | 'firefox' | 'webkit';
+    retries: number;
+    headless: boolean;
   };
   recording: {
     enabled: boolean;
@@ -36,6 +39,9 @@ export const defaultConfig: TestConfig = {
     mode: 'browser',
     saveTests: true,
     realTimeResults: true,
+    browserType: 'chromium',
+    retries: 0,
+    headless: false  // Changed to false so tests are visible by default
   },
   recording: {
     enabled: true,
@@ -46,7 +52,7 @@ export const defaultConfig: TestConfig = {
     features: {
       network: true,
       screenshots: true,
-      video: false,
+      video: true,
       tracing: false,
     },
     timeout: 30000,

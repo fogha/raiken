@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     // Get request body and log it for debugging
     const requestBody = await request.json();
     console.log('API Request Body:', requestBody);
-    const { action, url, script, selector, value, type, property, scriptId, config } = requestBody;
+    const { action, url, script, selector, value, type, property, scriptId, config, screenshotOptions } = requestBody;
     console.log('Parsed params:', { action, url, selector, type, property });
     
     if (action === 'initialize') {
@@ -47,6 +47,36 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ success: true, domTree });
       } catch (error) {
         console.error('DOM extraction failed:', error);
+        return NextResponse.json({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        }, { status: 500 });
+      }
+    }
+
+    if (action === 'takeScreenshot') {
+      console.log('Taking screenshot...');
+      try {
+        const screenshot = await PlaywrightService.takeScreenshot(screenshotOptions || {});
+        console.log('Screenshot taken successfully');
+        return NextResponse.json({ success: true, screenshot });
+      } catch (error) {
+        console.error('Screenshot failed:', error);
+        return NextResponse.json({ 
+          success: false, 
+          error: error instanceof Error ? error.message : String(error) 
+        }, { status: 500 });
+      }
+    }
+
+    if (action === 'getPageInfo') {
+      console.log('Getting page info...');
+      try {
+        const pageInfo = await PlaywrightService.getPageInfo();
+        console.log('Page info retrieved successfully');
+        return NextResponse.json({ success: true, pageInfo });
+      } catch (error) {
+        console.error('Get page info failed:', error);
         return NextResponse.json({ 
           success: false, 
           error: error instanceof Error ? error.message : String(error) 

@@ -22,26 +22,26 @@ interface TestTab extends TypesTestTab {
 
 export function TabbedTestEditor() {
   const {
-    editorTabs: tabs,
+    editorTabs,
     activeTabId,
-    setActiveTabId,
     addEditorTab,
     updateEditorTab,
-    removeEditorTab
+    removeEditorTab,
+    setActiveTab,
   } = useBrowserStore();
 
   const { runTest, isRunning } = useTestStore();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
   // Get the active tab data - safely handle null case
-  const activeTab = activeTabId ? tabs.find(tab => tab.id === activeTabId) : null;
+  const activeTab = activeTabId ? editorTabs.find(tab => tab.id === activeTabId) : null;
 
   // Handle tab operations
   const handleAddTab = () => {
     const _uuid = uuidv4();
     const newTab: TestTab = {
       id: _uuid,
-      name: `New Test ${tabs.length + 1}`,
+      name: `New Test ${editorTabs.length + 1}`,
       content: '',
       language: 'typescript',
       config: {
@@ -108,7 +108,7 @@ export function TabbedTestEditor() {
   };
 
   // Show empty state when no tabs
-  if (tabs.length === 0) {
+  if (editorTabs.length === 0) {
     return (
       <div className="flex flex-col h-full">
         {/* Header with Save/Run buttons (disabled) */}
@@ -168,10 +168,10 @@ export function TabbedTestEditor() {
       <div className="flex items-center justify-between gap-2 p-2 bg-muted/30">
         <div className="flex items-center gap-1">
           <div className="flex items-center bg-muted rounded-md p-1">
-            {tabs.map(tab => (
+            {editorTabs.map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTabId(tab.id)}
+                onClick={() => setActiveTab(tab.id)}
                 className={`
                   relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors
                   ${activeTabId === tab.id 
@@ -235,7 +235,7 @@ export function TabbedTestEditor() {
 
       {/* Tab content area */}
       <div className="flex-1 overflow-hidden">
-        {tabs.map(tab => (
+        {editorTabs.map(tab => (
           <div 
             key={tab.id} 
             className={`h-full ${activeTabId === tab.id ? 'block' : 'hidden'}`}

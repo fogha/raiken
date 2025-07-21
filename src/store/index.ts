@@ -40,7 +40,7 @@ const initialTestingState: TestingState = {
 
 const initialSettingsState: SettingsState = {
   globalConfig: {
-    headless: true,
+    headless: false,  // Changed to false so tests are visible by default
     browserType: 'chromium'
   },
   theme: 'system'

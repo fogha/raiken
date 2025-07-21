@@ -13,103 +13,60 @@ export interface AICompletionResponse {
 export type OpenAIResponse = AICompletionResponse;
 
 /**
- * Available AI models for test generation
- * Focused on models with strong programming capabilities
- */
-export interface AIModel {
-  id: string;
-  name: string;
-  description: string;
-  contextSize: number;
-}
-
-/**
- * List of available models for test generation
- * Prioritizing models good at programming tasks
- */
-export const AI_MODELS: AIModel[] = [
-  // OpenRouter Models - Latest and Most Capable
-  {
-    id: 'anthropic/claude-3.5-sonnet',
-    name: 'Claude 3.5 Sonnet',
-    description: 'Latest Claude model with enhanced coding capabilities (Default)',
-    contextSize: 200000
-  },
-  {
-    id: 'anthropic/claude-3-opus',
-    name: 'Claude 3 Opus',
-    description: 'Most powerful Claude model, excellent for complex test generation',
-    contextSize: 200000
-  },
-  {
-    id: 'anthropic/claude-3-sonnet',
-    name: 'Claude 3 Sonnet',
-    description: 'Balanced Claude model with strong programming capabilities',
-    contextSize: 200000
-  },
-  {
-    id: 'anthropic/claude-3-haiku',
-    name: 'Claude 3 Haiku',
-    description: 'Fast and efficient Claude model for simple test generation',
-    contextSize: 200000
-  },
-  {
-    id: 'openai/gpt-4o',
-    name: 'GPT-4o',
-    description: 'OpenAI\'s latest model with strong programming capabilities',
-    contextSize: 128000
-  },
-  {
-    id: 'openai/gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    description: 'Powerful model for complex test generation',
-    contextSize: 128000
-  },
-  {
-    id: 'openai/gpt-4',
-    name: 'GPT-4',
-    description: 'Reliable OpenAI model for test generation',
-    contextSize: 8192
-  },
-  {
-    id: 'google/gemini-pro-1.5',
-    name: 'Gemini Pro 1.5',
-    description: 'Google\'s latest model with excellent code generation',
-    contextSize: 1000000
-  },
-  {
-    id: 'google/gemini-pro',
-    name: 'Gemini Pro',
-    description: 'Google\'s advanced model with good code generation',
-    contextSize: 30720
-  },
-  {
-    id: 'meta-llama/llama-3.1-405b-instruct',
-    name: 'Llama 3.1 405B',
-    description: 'Meta\'s most powerful open model, excellent for complex coding',
-    contextSize: 32768
-  },
-  {
-    id: 'meta-llama/llama-3.1-70b-instruct',
-    name: 'Llama 3.1 70B',
-    description: 'Meta\'s large open model, great for code tasks',
-    contextSize: 32768
-  },
-  {
-    id: 'meta-llama/llama-3-70b-instruct',
-    name: 'Llama 3 70B',
-    description: 'Meta\'s proven open model, excellent for code tasks',
-    contextSize: 8192
-  }
-];
-
-/**
  * Configuration options for the AI service
  */
 export interface AIServiceConfig {
   model?: string;
   apiKey: string;
 }
+
+// Temporary hard-coded catalogue (until live /models endpoint is wired)
+export const SUPPORTED_MODELS = [
+  // Anthropic Claude Models
+  'anthropic/claude-3.5-sonnet',     // Latest and most capable
+  'anthropic/claude-3.5-haiku',      // Fast and efficient
+  'anthropic/claude-3-opus',         // Most powerful Claude 3
+  'anthropic/claude-3-sonnet',       // Balanced performance
+  'anthropic/claude-3-haiku',        // Fastest Claude 3
+  
+  // OpenAI GPT Models
+  'openai/gpt-4o',                   // Latest GPT-4 Omni
+  'openai/gpt-4o-mini',              // Smaller, faster GPT-4o
+  'openai/gpt-4-turbo',              // GPT-4 Turbo
+  'openai/gpt-4',                    // Standard GPT-4
+  'openai/gpt-3.5-turbo',            // GPT-3.5 Turbo
+  
+  // Google Models
+  'google/gemini-pro-1.5',           // Gemini Pro 1.5
+  'google/gemini-pro',               // Gemini Pro
+  'google/gemini-flash-1.5',         // Gemini Flash 1.5
+  
+  // Meta Llama Models
+  'meta-llama/llama-3.1-405b-instruct', // Largest Llama 3.1
+  'meta-llama/llama-3.1-70b-instruct',  // Llama 3.1 70B
+  'meta-llama/llama-3.1-8b-instruct',   // Llama 3.1 8B
+  'meta-llama/llama-3-70b-instruct',    // Llama 3 70B
+  'meta-llama/llama-3-8b-instruct',     // Llama 3 8B
+  
+  // Mistral Models
+  'mistralai/mistral-large',         // Mistral Large
+  'mistralai/mistral-medium',        // Mistral Medium
+  'mistralai/mistral-small',         // Mistral Small
+  'mistralai/mixtral-8x7b-instruct', // Mixtral 8x7B
+  'mistralai/mixtral-8x22b-instruct', // Mixtral 8x22B
+  
+  // Cohere Models
+  'cohere/command-r-plus',           // Command R+
+  'cohere/command-r',                // Command R
+  'cohere/command',                  // Command
+  
+  // Other Notable Models
+  'perplexity/llama-3.1-sonar-large-128k-online', // Perplexity Sonar
+  'qwen/qwen-2-72b-instruct',        // Qwen 2 72B
+  'databricks/dbrx-instruct',        // DBRX Instruct
+  'microsoft/wizardlm-2-8x22b',      // WizardLM 2
+] as const;
+export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
 
 /**
  * Service to interact with OpenRouter API for generating test scripts
@@ -126,11 +83,11 @@ export class OpenRouterService {
     if (typeof configOrApiKey === 'string') {
       this.config = {
         apiKey: configOrApiKey,
-        model: 'anthropic/claude-3.5-sonnet' // Default model
+        model: 'anthropic/claude-4-sonnet' // Default model
       };
     } else {
       this.config = {
-        model: configOrApiKey.model || 'anthropic/claude-3.5-sonnet',
+        model: configOrApiKey.model || 'anthropic/claude-4-sonnet',
         apiKey: configOrApiKey.apiKey
       };
     }
@@ -179,10 +136,6 @@ export class OpenRouterService {
       const { systemPrompt, userPrompt } = this.createEnhancedPrompts(prompt, domTree);
       console.log('[Arten] Enhanced prompts created - System:', systemPrompt.length, 'User:', userPrompt.length);
       
-      // Debug: Display the actual prompts being sent to OpenRouter
-      console.log('[Arten] System Prompt:', systemPrompt);
-      console.log('[Arten] User Prompt:', userPrompt);
-
       // Prepare request payload with optimized settings
       const requestPayload = this.buildRequestPayload(userPrompt, systemPrompt);
 
@@ -238,7 +191,6 @@ export class OpenRouterService {
         }
       ],
       temperature: 0.2, // Lower temperature for more deterministic outputs
-      max_tokens: 4000, // Ensure we get a complete test script
       top_p: 0.95,
       frequency_penalty: 0,
       presence_penalty: 0,
@@ -262,62 +214,48 @@ export class OpenRouterService {
    * Create enhanced system and user prompts with DOM context for better selector generation
    */
   private createEnhancedPrompts(prompt: string, domTree: any = null): { systemPrompt: string; userPrompt: string } {
-    try {
-      // Check if the prompt is a natural language description or JSON
-      const isNaturalLanguage = !prompt.trim().startsWith('{') && !prompt.trim().startsWith('[');
-      
-      // Build comprehensive system prompt with DOM context and instructions
-      let systemPrompt = `
-        You are an expert Playwright test automation engineer. 
-        Your task is to create a complete, executable Playwright test script.
-      `;
-
-      let userPrompt = '';
-
-      // Add DOM context if available
-      if (domTree) {
-        systemPrompt += `
-          DOM STRUCTURE CONTEXT:
-          This is the ONLY DOM context you should use.
-          DOM JSON:
-          ${JSON.stringify(domTree, null, 2)}
-        `;
-      }
-      
-      // Add detailed test generation guidelines to system prompt
-      systemPrompt += this.getEnhancedTestGenerationGuidelines(domTree !== null);
-      
-      if (isNaturalLanguage) {
-        userPrompt = `Create a Playwright test for this description:
-          ${prompt}
-          Return only the executable TypeScript test code.
-        `;
-      } else {
-        // Try to parse as JSON for structured input
-        try {
-          const testSpec = JSON.parse(prompt);
-            userPrompt = `Create a Playwright test for this JSON specification:
-            ${testSpec}
-            Return only the executable TypeScript test code.
-          `;
-        } catch {
-          userPrompt = `Create a Playwright test for this specification:
-            ${prompt}
-            Return only the executable TypeScript test code.
-          `;
-        }
-      }
-      
-      return { systemPrompt, userPrompt };
-    } catch (error) {
-      console.warn('[Arten] Error in createEnhancedPrompts:', error);
-      // Fallback to legacy method
-      const fallbackPrompt = this.createContextPrompt(prompt);
-      return {
-        systemPrompt: 'You are an expert Playwright test automation engineer who creates high-quality, maintainable test scripts.',
-        userPrompt: fallbackPrompt
-      };
+    // ---------- 1. Prepare DOM snippet (truncate if huge) ----------
+    let domSnippet = '';
+    if (domTree) {
+      const raw = JSON.stringify(domTree, null, 2);
+      const max = 8000; // keep system prompt well below 32k tokens
+      domSnippet = raw.length > max ? `${raw.slice(0, max)}\n... [truncated ${raw.length - max} chars]` : raw;
     }
+
+    // ---------- 2. Build SYSTEM prompt ----------
+    const systemPrompt = this.buildSystemPrompt(domSnippet);
+
+    // ---------- 3. Build USER prompt ----------
+    let userPrompt: string;
+    let testSpecJson = prompt.trim();
+    const isJson = testSpecJson.startsWith('{') || testSpecJson.startsWith('[');
+
+    if (!isJson) {
+      // Wrap natural language into minimal instruction
+      userPrompt = `Generate a Playwright test that automates the following scenario:\n\n"""\n${testSpecJson}\n"""`;
+    } else {
+      // Pass through the JSON spec verbatim
+      userPrompt = `Using the JSON test specification below, generate the Playwright test.\nReturn **only** TypeScript code.\n\nJSON SPEC:\n\n${testSpecJson}`;
+    }
+
+    return { systemPrompt, userPrompt };
+  }
+
+  /**
+   * Compose the full SYSTEM prompt once, with clearly marked sections.
+   */
+  private buildSystemPrompt(domSnippet: string): string {
+    const baseRules = `### ROLE\nYou are an expert Playwright-Test engineer. Produce clear, maintainable TypeScript tests.\n\n`;
+
+    const quickRules = `### QUICK RULES\n1. NEVER use page.waitForTimeout; rely on auto-waiting or expect().\n2. Selector preference: data-test-id → role/label → visible text → css.\n3. Add at least one assertion proving the user goal succeeded (toast, URL, etc.).\n4. Return ONLY valid TypeScript code – no extra prose.\n`;
+
+    const domSection = domSnippet
+      ? `\n### DOM CONTEXT (read-only)\n${domSnippet}\n`
+      : '';
+
+    const detailedGuidelines = `\n### DETAILED GUIDELINES\n${this.getEnhancedTestGenerationGuidelines(Boolean(domSnippet))}`;
+
+    return baseRules + quickRules + domSection + detailedGuidelines;
   }
 
   /**
@@ -412,8 +350,9 @@ export class OpenRouterService {
 
       3. ROBUST TEST STRUCTURE:
           - Include proper imports and TypeScript typing
-          - Add meaningful test descriptions
-          - Implement proper waiting strategies
+          - Use **test.beforeEach** to handle common navigation / login setup so each test block contains only the unique steps
+          - Implement **explicit waits** (waitForSelector, expect(locator)...toBeVisible) rather than arbitrary timeouts
+          - **Avoid page.waitForTimeout unless absolutely unavoidable**
           - Include error handling and recovery
           - Add comprehensive assertions
 
@@ -501,32 +440,5 @@ export class OpenRouterService {
     `;
     
     return guidelines;
-  }
-
-  /**
-   * Create a detailed context prompt for the OpenRouter API (legacy method)
-   */
-  private createContextPrompt(jsonInput: string): string {
-    try {
-      // Parse the JSON input to extract test details
-      const testSpec = JSON.parse(jsonInput);
-      
-      // Build the prompt with detailed instructions
-      let prompt = `
-        You are an expert Playwright test automation engineer. 
-        Your task is to create a complete, executable Playwright test script based on the provided JSON test specification provided below:
-
-        JSON TEST SPECIFICATION:
-        ${testSpec}
-
-        For detailed API reference and best practices, refer to the official Playwright documentation: https://playwright.dev/docs/intro
-        Return ONLY the executable Playwright test script without any explanations outside of code comments. The script should be immediately runnable with Playwright.
-      `;
-
-      return prompt;
-    } catch (error) {
-      console.warn('[Arten] Error parsing JSON in createContextPrompt:', error);
-      return '[Arten] Error parsing JSON in createContextPrompt:' + error;
-    }
   }
 }

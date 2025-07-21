@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs/promises');
 const path = require('path');
 
 /**
@@ -8,7 +8,9 @@ const path = require('path');
  * @param {number} timeout - Test timeout in milliseconds
  * @returns {string} Path to the generated config file
  */
-function createPlaywrightConfig(features, browserType, timeout) {
+async function createPlaywrightConfig(features, browserType, timeout) {
+  console.log(`[Config] Creating ${browserType} config with video: ${features.video}, screenshots: ${features.screenshots}`);
+
   const configContent = `
 import { defineConfig, devices } from '@playwright/test';
 
@@ -21,11 +23,9 @@ export default defineConfig({
   reporter: 'json',
   
   use: {
-    baseURL: process.env.BASE_URL,
-    
     // Recording options based on user configuration
     screenshot: ${features.screenshots ? "'on'" : "'off'"},
-    video: ${features.video ? "'retain-on-failure'" : "'off'"},
+    video: ${features.video ? "'on'" : "'off'"},
     trace: ${features.tracing ? "'on-first-retry'" : "'off'"},
     
     // Timeout setting
@@ -39,12 +39,12 @@ export default defineConfig({
     },
   ],
 
-  outputDir: 'test-results/',
+  outputDir: 'test-results/temp-execution/',
 });
 `;
 
   const configPath = path.join(process.cwd(), 'playwright.config.temp.ts');
-  fs.writeFileSync(configPath, configContent);
+  await fs.writeFile(configPath, configContent);
   return configPath;
 }
 
@@ -67,9 +67,11 @@ function getBrowserDeviceName(browserType) {
 /**
  * Cleanup temporary config file
  */
-function cleanupConfig(configPath) {
-  if (fs.existsSync(configPath)) {
-    fs.unlinkSync(configPath);
+async function cleanupConfig(configPath) {
+  try {
+    await fs.unlink(configPath);
+  } catch (_) {
+    /* ignore */
   }
 }
 

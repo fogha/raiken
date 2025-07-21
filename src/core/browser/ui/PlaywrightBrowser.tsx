@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, Play, Code2, Settings, FileText } from 'lucide-react';
+import { Loader2, Play, Code2, Settings, FileText, RefreshCw } from 'lucide-react';
 import { DOMNode } from '@/types/dom';
 import { TabbedTestEditor } from '@/core/testing/ui/TabbedTestEditor';
 import { TestReports } from '@/core/testing/ui/TestReports';
@@ -40,6 +40,10 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     isLaunched,
     setLaunched,
     status,
+    screenshot,
+    pageInfo,
+    setScreenshot,
+    setPageInfo,
     editorTabs,
     activeTabId,
     addEditorTab,
@@ -52,12 +56,13 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
   const [error, setError] = React.useState<string | null>(null);
   const [selectedElement, setSelectedElement] = React.useState<DOMNode | null>(null);
   const [domTree, setDomTree] = React.useState<DOMNode | null>(null);
+  const [isRefreshing, setIsRefreshing] = React.useState<boolean>(false);
 
   // Use the store URL or fallback to the initialUrl prop
   const currentUrl = storeUrl || initialUrl;
 
-  // Add iframeRef for browser display
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  // Remove iframeRef as we're no longer using iframe
+  // const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Effect to handle changes to generatedTest prop
   useEffect(() => {
@@ -96,7 +101,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         }
       }, 100);
     }
-  }, [editorTabs, addEditorTab]);
+  }, [initialGeneratedTest, activeTabId, editorTabs, addEditorTab, updateEditorTab]);
 
   // Handle browser launch and cleanup
   useEffect(() => {
@@ -151,7 +156,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         });
       }
     };
-  }, []);
+  }, [isLaunched, setLaunched, setStatus]);
 
   // Launch browser and navigate to URL
   const handleLoadUrl = async (e: React.FormEvent) => {
@@ -205,6 +210,16 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       setUrl(inputUrl);
       setStatus('NAVIGATION_SUCCESS' as SystemAction, `Navigated to ${inputUrl}`, 'success');
       console.log('Navigation successful');
+
+      // Take screenshot after navigation
+      await handleTakeScreenshot();
+      
+      // Get page info
+      await handleGetPageInfo();
+      
+      // Extract DOM
+      await handleExtractDOM();
+      
     } catch (error) {
       console.error('Error during URL load:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -251,6 +266,85 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     }
   };
 
+  // Take screenshot of the current page
+  const handleTakeScreenshot = async () => {
+    console.log('Taking screenshot...');
+    setStatus('TAKING_SCREENSHOT' as SystemAction, 'Taking screenshot...');
+    
+    try {
+      const response = await fetch('/api/browser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'takeScreenshot',
+          screenshotOptions: {
+            fullPage: true,
+            type: 'png'
+          }
+        })
+      });
+      
+      const data = await response.json();
+      if (!data.success) {
+        setStatus('SCREENSHOT_ERROR' as SystemAction, 'Failed to take screenshot', 'error');
+        throw new Error(data.error || 'Failed to take screenshot');
+      }
+      
+      setScreenshot(data.screenshot);
+      setStatus('SCREENSHOT_TAKEN' as SystemAction, 'Screenshot taken', 'success');
+      
+    } catch (err: any) {
+      console.error('Error taking screenshot:', err);
+      setStatus('SCREENSHOT_ERROR' as SystemAction, `Failed to take screenshot: ${err.message}`, 'error');
+    }
+  };
+
+  // Get page information
+  const handleGetPageInfo = async () => {
+    console.log('Getting page info...');
+    
+    try {
+      const response = await fetch('/api/browser', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'getPageInfo' })
+      });
+      
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to get page info');
+      }
+      
+      setPageInfo(data.pageInfo);
+      
+    } catch (err: any) {
+      console.error('Error getting page info:', err);
+    }
+  };
+
+  // Refresh the current view (screenshot, DOM, page info)
+  const handleRefreshView = async () => {
+    if (!isLaunched) return;
+    
+    setIsRefreshing(true);
+    setStatus('REFRESHING_VIEW' as SystemAction, 'Refreshing view...');
+    
+    try {
+      await Promise.all([
+        handleTakeScreenshot(),
+        handleGetPageInfo(),
+        handleExtractDOM()
+      ]);
+      
+      setStatus('VIEW_REFRESHED' as SystemAction, 'View refreshed', 'success');
+    } catch (error) {
+      console.error('Error refreshing view:', error);
+      setStatus('REFRESH_ERROR' as SystemAction, 'Failed to refresh view', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   // Handle node selection
   const handleNodeSelect = (node: DOMNode) => {
     console.log('Element selected:', node);
@@ -280,7 +374,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
                 placeholder="Enter URL (e.g., http://localhost:8000)"
                 className="flex-1 h-8"
               />
-              <Button type="submit" disabled={isLoading} className="whitespace-nowrap h-8">
+              <Button type="submit" disabled={isLoading || !inputUrl.trim()} className="whitespace-nowrap h-8">
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -297,13 +391,9 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
           <div className="flex-1 flex" style={{ height: 'calc(100% - 73px)' }}>
             {error ? (
               <div className="p-4 text-destructive">{error}</div>
-            ) : !isLaunched ? (
-              <div className="flex items-center justify-center w-full p-4 text-center text-muted-foreground">
-                Enter a URL to begin
-              </div>
             ) : (
               <div className="w-full h-full">
-                <Tabs defaultValue="browser" className="w-full h-full flex flex-col">
+                <Tabs defaultValue="tests" className="w-full h-full flex flex-col">
                   {/* Tab header */}
                   <div className="bg-muted h-10 flex items-center px-3 relative">
                     <TabsList className="flex gap-2 h-full border-0 bg-transparent p-0">
@@ -326,18 +416,83 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
 
                   {/* Tab content panels */}
                   <TabsContent value="browser" className="flex-1 overflow-auto p-0">
-                    {currentUrl ? (
-                      <iframe 
-                        ref={iframeRef} 
-                        title="Playwright Browser" 
-                        className="w-full h-full"
-                        src={currentUrl}
-                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
-                        onLoad={() => {
-                          console.log('Iframe loaded');
-                          handleExtractDOM();
-                        }}
-                      />
+                    {currentUrl && screenshot ? (
+                      <div className="relative w-full h-full">
+                        {/* Page info header */}
+                        {pageInfo && (
+                          <div className="absolute top-0 left-0 right-0 bg-background/90 backdrop-blur-sm border-b px-4 py-2 z-10">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-sm">
+                                <span className="font-medium truncate max-w-md" title={pageInfo.title}>
+                                  {pageInfo.title}
+                                </span>
+                                <span className="text-muted-foreground">•</span>
+                                <span className="text-muted-foreground truncate max-w-md" title={pageInfo.url}>
+                                  {pageInfo.url}
+                                </span>
+                                {pageInfo.viewport && (
+                                  <>
+                                    <span className="text-muted-foreground">•</span>
+                                    <span className="text-muted-foreground">
+                                      {pageInfo.viewport.width}×{pageInfo.viewport.height}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleRefreshView}
+                                disabled={isRefreshing}
+                                className="h-7 px-2"
+                              >
+                                {isRefreshing ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <>
+                                    <RefreshCw className="h-4 w-4 mr-1" />
+                                    Refresh
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Screenshot display */}
+                        <div className="w-full h-full overflow-auto" style={{ paddingTop: pageInfo ? '60px' : '0' }}>
+                          <img 
+                            src={screenshot}
+                            alt="Page Screenshot"
+                            className="max-w-none"
+                            style={{ 
+                              minWidth: '100%',
+                              height: 'auto',
+                              display: 'block'
+                            }}
+                          />
+                        </div>
+                        
+                        {/* Loading overlay */}
+                        {(isLoading || isRefreshing) && (
+                          <div className="absolute inset-0 bg-background/50 backdrop-blur-sm flex items-center justify-center z-20">
+                            <div className="flex items-center gap-2 text-sm">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              {isRefreshing ? 'Refreshing...' : 'Loading...'}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : currentUrl && !screenshot ? (
+                      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                        <div className="w-16 h-16 mb-6 text-muted-foreground/30">
+                          <Loader2 className="w-10 h-10 animate-spin" />
+                        </div>
+                        <h3 className="text-lg font-medium mb-2">Loading Page</h3>
+                        <p className="text-sm text-muted-foreground max-w-sm mb-4">
+                          Taking screenshot of {currentUrl}...
+                        </p>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                         <div className="w-16 h-16 mb-6 text-muted-foreground/30">

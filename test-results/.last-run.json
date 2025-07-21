@@ -1,9 +1,4 @@
 {
-  "status": "failed",
-  "failedTests": [
-    "generated-tests/arten_examples_app_test_7_51_11_am.spec.ts"
-  ],
-  "timestamp": "2025-06-16T08:05:09.514Z",
-  "error": "Test failed",
-  "resultFile": "arten_examples_app_test_7_51_11_am-2025-06-16T08-05-05-597Z.json"
+  "status": "passed",
+  "failedTests": []
 }

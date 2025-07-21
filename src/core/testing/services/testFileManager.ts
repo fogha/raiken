@@ -11,15 +11,36 @@ export interface TestFile {
 }
 
 export async function saveTestScript(name: string, content: string, tabId?: string): Promise<string> {
-  // Generate safe filename with optional tab ID for uniqueness
+  // Generate safe filename
   const safeName = name
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '_')
-    .replace(/_+/g, '_');
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
     
-  const filename = tabId ? `${safeName}_${tabId}.spec.ts` : `${safeName}.spec.ts`;
-  const filePath = path.join(TEST_SCRIPTS_DIR, filename);
+  let filename: string;
+  let filePath: string;
   
+  if (tabId) {
+    // For tabs, check if a file already exists for this tab ID
+    const existingFile = findExistingFileForTab(tabId);
+    if (existingFile) {
+      // Update the existing file
+      filename = path.basename(existingFile);
+      filePath = existingFile;
+      console.log(`[Arten] Updating existing file for tab ${tabId}: ${filePath}`);
+    } else {
+      // Create new file with tab ID
+      filename = `${safeName}_${tabId}.spec.ts`;
+      filePath = path.join(TEST_SCRIPTS_DIR, filename);
+      console.log(`[Arten] Creating new file for tab ${tabId}: ${filePath}`);
+    }
+  } else {
+    // No tab ID, create a simple filename
+    filename = `${safeName}.spec.ts`;
+    filePath = path.join(TEST_SCRIPTS_DIR, filename);
+  }
+   
   try {
     // Ensure the directory exists
     if (!fs.existsSync(TEST_SCRIPTS_DIR)) {
@@ -34,6 +55,27 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
   } catch (error) {
     console.error('[Arten] Error saving test script:', error);
     throw error;
+  }
+}
+
+/**
+ * Find existing file for a tab ID by searching for files that end with the tab ID
+ */
+function findExistingFileForTab(tabId: string): string | null {
+  try {
+    if (!fs.existsSync(TEST_SCRIPTS_DIR)) {
+      return null;
+    }
+    
+    const files = fs.readdirSync(TEST_SCRIPTS_DIR);
+    const existingFile = files.find(file => 
+      file.endsWith(`_${tabId}.spec.ts`) && file.includes(tabId)
+    );
+    
+    return existingFile ? path.join(TEST_SCRIPTS_DIR, existingFile) : null;
+  } catch (error) {
+    console.error('[Arten] Error finding existing file for tab:', error);
+    return null;
   }
 }
 

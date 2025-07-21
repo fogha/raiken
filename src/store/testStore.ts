@@ -1,5 +1,4 @@
-import { create } from 'zustand';
-import { convertToRunnableScript } from '@/core/testing/test-script-utils';
+import { createSlice } from './createSlice';
 import { useBrowserStore } from './browserStore';
 import { useConfigurationStore } from './configurationStore';
 
@@ -28,7 +27,7 @@ interface TestState {
   generatedTests: string[];
   jsonTestScript: string;
   isGenerating: boolean;
-  isRunning: boolean;
+  runningTests: Record<string, boolean>; // Track which tests are currently running
   results: any[];
   generationError: string | null;
   
@@ -44,7 +43,8 @@ interface TestState {
   addGeneratedTest: (script: string) => void;
   setJsonTestScript: (script: string) => void;
   setIsGenerating: (isGenerating: boolean) => void;
-  setIsRunning: (isRunning: boolean) => void;
+  setTestRunning: (testPath: string, isRunning: boolean) => void;
+  isTestRunning: (testPath: string) => boolean;
   setResults: (results: any[]) => void;
   setGenerationError: (error: string | null) => void;
   addTab: (tab: TestTab) => void;
@@ -54,17 +54,18 @@ interface TestState {
   // Complex actions
   generateTest: () => Promise<void>;
   runTest: (testPath?: string) => Promise<void>;
+  deleteTestFile: (testPath: string) => Promise<void>;
   saveTest: () => Promise<void>;
   loadTestFiles: () => Promise<void>;
 }
 
-export const useTestStore = create<TestState>((set, get) => ({
+export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   // Initial state
   testScripts: [],
   generatedTests: [],
   jsonTestScript: '',
   isGenerating: false,
-  isRunning: false,
+  runningTests: {},
   results: [],
   generationError: null,
   testFiles: [],
@@ -76,7 +77,13 @@ export const useTestStore = create<TestState>((set, get) => ({
   addGeneratedTest: (script) => set((state) => ({ generatedTests: [...state.generatedTests, script] })),
   setJsonTestScript: (script) => set({ jsonTestScript: script }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
-  setIsRunning: (isRunning) => set({ isRunning }),
+  setTestRunning: (testPath, isRunning) => set((state) => ({
+    runningTests: {
+      ...state.runningTests,
+      [testPath]: isRunning
+    }
+  })),
+  isTestRunning: (testPath) => Boolean(get().runningTests[testPath]),
   setResults: (results) => set({ results }),
   setGenerationError: (error) => set({ generationError: error }),
   addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
@@ -114,7 +121,8 @@ export const useTestStore = create<TestState>((set, get) => ({
         throw new Error(errorData.error || 'Failed to generate test script');
       }
 
-      const generatedScript = await response.text();
+      const responseData = await response.json();
+      const generatedScript = responseData.script;
       state.addGeneratedTest(generatedScript);
 
       // Call the saveTest method to save and create a new tab
@@ -130,14 +138,14 @@ export const useTestStore = create<TestState>((set, get) => ({
   
   runTest: async (testPath?: string) => {
     const state = get();
-    state.setIsRunning(true);
+    
+    // Use provided testPath or default to the most recent generated test
+    const pathToExecute = testPath || `generated-tests/${state.tabs[state.tabs.length - 1]?.name || 'test'}.spec.ts`;
+    state.setTestRunning(pathToExecute, true);
     
     try {
-      // Get configuration from configuration store
       const configStore = useConfigurationStore.getState();
-      
-      // Use provided testPath or default to the most recent generated test
-      const pathToExecute = testPath || `generated-tests/${state.tabs[state.tabs.length - 1]?.name || 'test'}.spec.ts`;
+      const browserState = useBrowserStore.getState();
       
       const response = await fetch('/api/execute-test', {
         method: 'POST',
@@ -150,7 +158,8 @@ export const useTestStore = create<TestState>((set, get) => ({
             browserType: configStore.config.execution.browserType,
             retries: configStore.config.execution.retries,
             timeout: configStore.config.playwright.timeout,
-            features: configStore.config.playwright.features
+            features: configStore.config.playwright.features,
+            headless: configStore.config.execution.headless
           }
         }),
       });
@@ -160,14 +169,36 @@ export const useTestStore = create<TestState>((set, get) => ({
         throw new Error(error.error || 'Failed to execute test');
       }
 
-      const { results: testResults, success, resultFile } = await response.json();
+      const { results: testResults, success, resultFile, summary, needsAIAnalysis, suiteId } = await response.json();
       state.setResults(testResults);
 
+      // Update browser status for toast notifications
+      const browserStore = useBrowserStore.getState();
+      if (success) {
+        browserStore.setStatus('TEST_PASSED', 'Test passed successfully', 'success');
+      } else {
+        const failMsg = summary || (testResults?.error || 'Test failed');
+        browserStore.setStatus('TEST_FAILED', failMsg, 'error');
+      }
+
+      // Dispatch custom event for TestReports component to refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('test-execution-complete', { detail: {
+          success,
+          resultFile,
+          summary,
+          needsAIAnalysis,
+          suiteId
+        }}));
+      }
+
       console.log(`[Arten] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
+      console.log(`[Arten] Used test suite: ${suiteId}`);
+      console.log(`[Arten] AI Analysis: ${needsAIAnalysis ? 'Generated for failed test' : 'Not needed for passed test'}`);
     } catch (error) {
       console.error('Test execution failed:', error);
     } finally {
-      state.setIsRunning(false);
+      state.setTestRunning(pathToExecute, false);
     }
   },
 
@@ -175,9 +206,10 @@ export const useTestStore = create<TestState>((set, get) => ({
     const state = get();
     try {
       const testSpec = JSON.parse(state.jsonTestScript);
-      const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
-      const testName = testSpec.name ? `${testSpec.name} ${timestamp}` : `Generated Test ${timestamp}`;
-      const runnableScript = convertToRunnableScript(testSpec);
+      
+      // Use the test name from the JSON without adding timestamp
+      // Timestamp will only be added for completely new tests via TestBuilder
+      const testName = testSpec.name || 'Generated Test';
       
       // Save the test script to the generated-tests folder via API
       const saveResponse = await fetch('/api/save-test', {
@@ -187,7 +219,7 @@ export const useTestStore = create<TestState>((set, get) => ({
         },
         body: JSON.stringify({
           name: testName,
-          content: runnableScript
+          content: state.generatedTests[state.generatedTests.length - 1] // Use the last generated script
         }),
       });
 
@@ -200,14 +232,14 @@ export const useTestStore = create<TestState>((set, get) => ({
       }
       
       // Add to test scripts array
-      state.addTestScript(runnableScript);
+      state.addTestScript(state.generatedTests[state.generatedTests.length - 1]); // Add the last generated script
       
       // Create a new tab in the browser store
       const browserStore = useBrowserStore.getState();
       const newTab = {
         id: `tab_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
         name: testName,
-        content: runnableScript,
+        content: state.generatedTests[state.generatedTests.length - 1], // Use the last generated script
         language: 'typescript' as const,
         config: {
           headless: true,
@@ -227,6 +259,30 @@ export const useTestStore = create<TestState>((set, get) => ({
       }, 100);
     } catch (scriptError) {
       console.error('[Arten] Error creating runnable script:', scriptError);
+    }
+  },
+
+  deleteTestFile: async (testPath: string) => {
+    const state = get();
+    try {
+      const response = await fetch('/api/delete-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ testPath }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete test file');
+      }
+
+      const result = await response.json();
+      console.log(`[Arten] Test file deleted: ${testPath}`);
+      state.setTestFiles(state.testFiles.filter(file => file.path !== testPath));
+    } catch (error) {
+      console.error('Failed to delete test file:', error);
     }
   },
 

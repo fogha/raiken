@@ -47,3 +47,6 @@ next-env.d.ts
 /generated-tests/
 /test-results/
 /test-results/*
+
+# Temporary config files
+playwright.config.temp.ts

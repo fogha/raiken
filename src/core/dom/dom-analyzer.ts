@@ -28,7 +28,8 @@ const getElementPath = (element: Element, root: Element): string => {
 let nodeCounter = 0;
 
 export const analyzeDOMTree = (element: Element, root: Element = element): DOMNode => {
-  const node: DOMNode = {
+  // Create DOMNode structure
+  const domNode: DOMNode = {
     tagName: element.tagName.toLowerCase(),
     id: element.id || '',
     className: element.className || '',
@@ -38,40 +39,12 @@ export const analyzeDOMTree = (element: Element, root: Element = element): DOMNo
     path: getElementPath(element, root),
   };
 
-  // Log the node creation
-  console.log('[domAnalyzer] Created node:', {
-    tagName: node.tagName,
-    path: node.path
+  // Process children recursively
+  element.children.forEach(child => {
+    domNode.children.push(analyzeDOMTree(child));
   });
 
-  // Capture all attributes
-  Array.from(element.attributes).forEach(attr => {
-    if (node.attributes) {
-      node.attributes[attr.name] = attr.value;
-    }
-  });
-
-  // Handle form elements
-  if (element instanceof HTMLInputElement || 
-      element instanceof HTMLTextAreaElement || 
-      element instanceof HTMLSelectElement) {
-    node.type = element instanceof HTMLInputElement ? element.type : element.tagName.toLowerCase();
-    
-    if (element instanceof HTMLInputElement && 
-        (element.type === 'checkbox' || element.type === 'radio')) {
-      // Add checked state to attributes
-      if (node.attributes) {
-        node.attributes['checked'] = element.checked.toString();
-      }
-    }
-  }
-
-  // Recursively analyze child nodes
-  Array.from(element.children).forEach(child => {
-    node.children.push(analyzeDOMTree(child));
-  });
-
-  return node;
+  return domNode;
 };
 
 export const connectToLocalProject = async (url: string): Promise<DOMNode | null> => {

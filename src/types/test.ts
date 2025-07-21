@@ -53,6 +53,19 @@ export interface TestResult {
   message?: string;
   error?: string;
   timestamp?: string;
+  detailedErrors?: DetailedError[];
+}
+
+export interface DetailedError {
+  message: string;
+  stack?: string;
+  location?: {
+    file: string;
+    line: number;
+    column: number;
+  };
+  testName?: string;
+  step?: string;
 }
 
 // Test tab types
@@ -74,4 +87,29 @@ export interface TabbedTestEditorProps {
   initialScript?: string;
   globalConfig: TestScriptConfig;
   onRef?: (ref: { addNewTab: (content: string, name: string) => string }) => void;
+}
+
+// UI-specific test report interface for displaying execution results
+export interface UITestReport {
+  id: string;
+  timestamp: string;
+  testPath: string;
+  testName: string;
+  success: boolean;
+  status: 'passed' | 'failed' | 'skipped';
+  duration: number;
+  summary?: string;
+  suggestions?: string;
+  resultFile: string;
+  browser?: string;
+  retries?: number;
+  errors?: Array<{
+    message: string;
+    location?: {
+      file: string;
+      line: number;
+      column: number;
+    };
+    stack?: string; // Full Playwright error stack trace
+  }>;
 }

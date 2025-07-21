@@ -5,6 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Input } from './ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { useConfigurationStore } from '@/store/configurationStore';
+import { SUPPORTED_MODELS } from '@/core/testing/services/openrouter.service';
 
 export function ConfigurationPanel() {
   const {
@@ -112,6 +113,17 @@ export function ConfigurationPanel() {
                   updateExecutionConfig({ realTimeResults: checked })}
               />
             </div>
+
+            <div className="flex items-center justify-between">
+              <Label>Headless Mode</Label>
+              <Switch
+                checked={config.execution.headless}
+                onCheckedChange={(checked) => 
+                  updateExecutionConfig({ headless: checked })}
+              />
+            </div>
+
+
           </TabsContent>
 
           <TabsContent value="recording" className="space-y-4">
@@ -237,11 +249,9 @@ export function ConfigurationPanel() {
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="anthropic/claude-3-opus">Claude 3 Opus (Best Quality)</SelectItem>
-                  <SelectItem value="anthropic/claude-3-sonnet">Claude 3 Sonnet (Balanced)</SelectItem>
-                  <SelectItem value="anthropic/claude-2">Claude 2 (Legacy)</SelectItem>
-                  <SelectItem value="openai/gpt-4-turbo">GPT-4 Turbo</SelectItem>
-                  <SelectItem value="openai/gpt-3.5-turbo">GPT-3.5 Turbo</SelectItem>
+                  {SUPPORTED_MODELS.map(m => (
+                    <SelectItem key={m} value={m}>{m}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground mt-1">

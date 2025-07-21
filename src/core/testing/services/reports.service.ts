@@ -1,5 +1,5 @@
 import { OpenRouterService } from './openrouter.service';
-import { TestResult } from '@/types/test';
+import { TestResult, DetailedError } from '@/types/test';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,16 +9,21 @@ import path from 'path';
 export interface TestReport {
   id: string;
   timestamp: string;
+  testPath: string;
   testScript: string;
-  results: TestResult[];
+  rawPlaywrightOutput: string;
+  rawPlaywrightError: string;
+  exitCode: number;
   summary?: string;
+  suggestions?: string;
   status: 'success' | 'failure' | 'partial';
   durationMs: number;
   metadata?: Record<string, any>;
 }
 
 /**
- * Service to manage test reports
+ * Service to manage test reports - focuses on saving reports with AI analysis
+ * Reading and deleting reports is handled by the /api/test-reports API route
  */
 export class ReportsService {
   private reportsDir: string;
@@ -26,7 +31,7 @@ export class ReportsService {
   
   constructor(config: { apiKey: string; model?: string; reportsDir?: string }) {
     // Use the test-result folder in the project root
-    this.reportsDir = config.reportsDir || path.resolve(process.cwd(), 'test-result');
+    this.reportsDir = config.reportsDir || path.resolve(process.cwd(), 'test-results');
     this.openRouter = new OpenRouterService({
       apiKey: config.apiKey,
       model: config.model || 'anthropic/claude-3-sonnet'
@@ -40,24 +45,26 @@ export class ReportsService {
   }
   
   /**
-   * Save a test report
+   * Save a test report with AI-generated summary and suggestions
    */
   async saveReport(report: Omit<TestReport, 'id' | 'summary'>): Promise<TestReport> {
     // Generate a unique ID for the report
     const id = `report-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
     
-    // Determine overall status
-    const status = this.determineStatus(report.results);
-    
-    // Generate a summary using OpenRouter
-    const summary = await this.generateSummary(report.testScript, report.results);
+    // Generate summary and suggestions using OpenRouter
+    const { summary, suggestions } = await this.generateSummary(
+      report.testScript, 
+      report.rawPlaywrightOutput, 
+      report.rawPlaywrightError, 
+      report.exitCode
+    );
     
     // Create the complete report
     const completeReport: TestReport = {
       ...report,
       id,
-      status,
-      summary
+      summary,
+      suggestions
     };
     
     // Save to file
@@ -65,66 +72,6 @@ export class ReportsService {
     fs.writeFileSync(filePath, JSON.stringify(completeReport, null, 2));
     
     return completeReport;
-  }
-  
-  /**
-   * Get all test reports
-   */
-  getReports(): TestReport[] {
-    try {
-      // Read all report files from the directory
-      const files = fs.readdirSync(this.reportsDir)
-        .filter(file => file.endsWith('.json'));
-      
-      // Parse each file and return as TestReport objects
-      return files.map(file => {
-        const filePath = path.join(this.reportsDir, file);
-        const content = fs.readFileSync(filePath, 'utf8');
-        return JSON.parse(content) as TestReport;
-      }).sort((a, b) => {
-        // Sort by timestamp, newest first
-        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-      });
-    } catch (error) {
-      console.error('Error reading test reports:', error);
-      return [];
-    }
-  }
-  
-  /**
-   * Get a specific test report by ID
-   */
-  getReportById(id: string): TestReport | null {
-    try {
-      const filePath = path.join(this.reportsDir, `${id}.json`);
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-      
-      const content = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(content) as TestReport;
-    } catch (error) {
-      console.error(`Error reading test report ${id}:`, error);
-      return null;
-    }
-  }
-  
-  /**
-   * Delete a test report by ID
-   */
-  deleteReport(id: string): boolean {
-    try {
-      const filePath = path.join(this.reportsDir, `${id}.json`);
-      if (!fs.existsSync(filePath)) {
-        return false;
-      }
-      
-      fs.unlinkSync(filePath);
-      return true;
-    } catch (error) {
-      console.error(`Error deleting test report ${id}:`, error);
-      return false;
-    }
   }
   
   /**
@@ -143,29 +90,76 @@ export class ReportsService {
     return 'partial';
   }
   
-  /**
-   * Generate a summary of the test results using OpenRouter
-   */
-  private async generateSummary(testScript: string, results: TestResult[]): Promise<string> {
+  private async generateSummary(
+    testScript: string, 
+    rawPlaywrightOutput: string, 
+    rawPlaywrightError: string, 
+    exitCode: number
+  ): Promise<{ summary: string; suggestions: string }> {
+    // Send RAW Playwright output directly to AI - no parsing or processing
+    const success = exitCode === 0;
+    
+    const scriptPreview = testScript.length > 6000 ? `${testScript.slice(0, 6000)}\n... [truncated]` : testScript;
+    
+    const analysisPrompt = `You are an expert Playwright test analyst.
+
+GOAL: Analyze the RAW Playwright execution output and explain what happened. If the test failed, identify the root cause and propose concrete fixes.
+
+RESPONSE FORMAT (return ONLY valid JSON):
+{
+  "summary": "A detailed explanation of what happened and why",
+  "suggestions": "Specific, actionable recommendations to fix or improve the test"
+}
+
+TEST SCRIPT:
+\`\`\`typescript
+${scriptPreview}
+\`\`\`
+
+PLAYWRIGHT EXECUTION DETAILS:
+- Exit Code: ${exitCode}
+- Test Status: ${success ? 'PASSED' : 'FAILED'}
+
+RAW PLAYWRIGHT STDOUT:
+\`\`\`
+${rawPlaywrightOutput}
+\`\`\`
+
+RAW PLAYWRIGHT STDERR:
+\`\`\`
+${rawPlaywrightError}
+\`\`\`
+
+Analyze the raw output above and provide insights based on the actual Playwright execution.`;
+
     try {
-      // Create a prompt for the AI to generate a summary
-      const prompt = {
-        testScript,
-        results: results.map(r => ({
-          success: r.success,
-          message: r.message,
-          timestamp: r.timestamp
-        }))
-      };
-      
-      // Generate the summary
-      const contextPrompt = `You are an expert test analyst. Please provide a concise summary of the test execution results below. Focus on what worked, what failed, and potential reasons for failures. Keep your response under 200 words and format it in a way that's easy to read.\n\nTEST SCRIPT:\n${testScript.substring(0, 500)}...\n\nTEST RESULTS:\n${JSON.stringify(prompt.results, null, 2)}\n\nPlease provide your analysis:`;
-      
-      const summaryResponse = await this.openRouter.generateTestScript(contextPrompt);
-      return summaryResponse || 'No summary available';
-    } catch (error) {
-      console.error('Error generating test summary:', error);
-      return 'Failed to generate summary. Please review the detailed results.';
+      const response = await this.openRouter.generateTestScript(analysisPrompt);
+      if (response) {
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (parsed.summary && parsed.suggestions) {
+            return {
+              summary: parsed.summary,
+              suggestions: parsed.suggestions
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[ReportsService] AI analysis failed or returned invalid JSON, falling back:', err);
     }
+
+    // Fallback (no AI or parse failure)
+    if (success) {
+      return {
+        summary: `✅ Test passed successfully!`,
+        suggestions: ''
+      };
+    }
+    return {
+      summary: `❌ Test failed (exit code ${exitCode}). Check raw output for details.`,
+      suggestions: 'Review the raw Playwright output above for specific error messages and stack traces.'
+    };
   }
 }

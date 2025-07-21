@@ -39,7 +39,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       console.log('[Arten] Setting initial JSON test script from URL');
       setJsonTestScript(url);
     }
-  }, []); // Empty dependency array to ensure it only runs once on mount
+  }, [url, setJsonTestScript]); // Include dependencies for proper effect behavior
 
   // Function to validate the JSON test script
   const validateTestScript = (script: string): boolean => {
@@ -84,16 +84,21 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       if (onTestGenerated && generatedTests.length > 0) {
         console.log('[Arten] Adding generated test to tabbed editor');
         const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
-        let testName = `Generated Test ${timestamp}`;
+        let testName = 'Generated Test'; // Default name without timestamp
         
         // Parse the JSON test script to get any custom name
         try {
           const testSpec = JSON.parse(jsonTestScript);
           if (testSpec.name) {
-            testName = `${testSpec.name} ${timestamp}`;
+            testName = testSpec.name; // Use the name from JSON spec
+          } else {
+            // Only add timestamp for truly new tests without a name
+            testName = `Generated Test ${timestamp}`;
           }
         } catch (e) {
           console.warn('[Arten] Could not parse JSON test script for name:', e);
+          // For unparseable JSON, use timestamp to make it unique
+          testName = `Generated Test ${timestamp}`;
         }
         
         // Use the most recently generated test

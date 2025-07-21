@@ -1,6 +1,6 @@
-import { create } from 'zustand';
-
-export type StatusType = 'idle' | 'loading' | 'success' | 'error';
+import { createSlice } from './createSlice';
+import { StatusType } from '@/types/status';
+export type { StatusType };
 
 export type SystemAction = 
   // Browser actions
@@ -8,6 +8,7 @@ export type SystemAction =
   | 'BROWSER_READY'
   | 'BROWSER_CLOSED'
   | 'BROWSER_ERROR'
+  | 'BROWSER_CLOSING'
   // Navigation actions
   | 'NAVIGATING'
   | 'NAVIGATION_COMPLETE'
@@ -20,11 +21,21 @@ export type SystemAction =
   | 'DOM_UPDATED'
   | 'EXTRACTING_DOM'
   | 'ELEMENT_SELECTED'
+  // Screenshot actions
+  | 'TAKING_SCREENSHOT'
+  | 'SCREENSHOT_TAKEN'
+  | 'SCREENSHOT_ERROR'
+  // View actions
+  | 'REFRESHING_VIEW'
+  | 'VIEW_REFRESHED'
+  | 'REFRESH_ERROR'
   // Test actions
   | 'GENERATING_TEST'
   | 'TEST_GENERATED'
   | 'RUNNING_TEST'
   | 'TEST_ERROR'
+  | 'TEST_PASSED'
+  | 'TEST_FAILED'
   | 'IDLE';
 
 interface SystemStatus {
@@ -49,42 +60,50 @@ interface TestTab {
 
 interface BrowserState {
   // Browser state
-  url: string;
+  url: string | null;
   isLoading: boolean;
   isLaunched: boolean;
+  
+  // Visual state
+  screenshot: string | null;
+  pageInfo: {
+    url: string;
+    title: string;
+    viewport: { width: number; height: number } | null;
+  } | null;
+  
+  // Viewport state
+  viewport: { width: number; height: number };
+  deviceScaleFactor: number;
+  isMobile: boolean;
+  
+  // Status and messaging
+  status: {
+    action: SystemAction;
+    message: string;
+    type: StatusType;
+  };
   
   // Editor state
   editorTabs: TestTab[];
   activeTabId: string | null;
   
-  // Browser settings
-  viewport: {
-    width: number;
-    height: number;
-  };
-  deviceScaleFactor: number;
-  isMobile: boolean;
-
-  // System status
-  status: SystemStatus;
-  
   // Actions
-  setUrl: (url: string) => void;
-  setLoading: (isLoading: boolean) => void;
-  setLaunched: (isLaunched: boolean) => void;
+  setUrl: (url: string | null) => void;
+  setLoading: (loading: boolean) => void;
+  setLaunched: (launched: boolean) => void;
+  setScreenshot: (screenshot: string | null) => void;
+  setPageInfo: (pageInfo: BrowserState['pageInfo']) => void;
   setViewport: (width: number, height: number) => void;
   setDeviceScaleFactor: (scale: number) => void;
   setMobile: (isMobile: boolean) => void;
   setStatus: (action: SystemAction, message: string, type?: StatusType) => void;
   
   // Editor actions
-  setEditorTabs: (tabs: TestTab[]) => void;
-  setActiveTabId: (id: string | null) => void;
   addEditorTab: (tab: TestTab) => void;
   updateEditorTab: (id: string, updates: Partial<TestTab>) => void;
   removeEditorTab: (id: string) => void;
-
-  reset: () => void;
+  setActiveTab: (id: string) => void;
 }
 
 const initialState = {
@@ -107,29 +126,44 @@ const initialState = {
   }
 };
 
-export const useBrowserStore = create<BrowserState>((set, get) => ({
-  ...initialState,
+export const useBrowserStore = createSlice<BrowserState>('browser', (set, get) => ({
+  // Initial state
+  url: null,
+  isLoading: false,
+  isLaunched: false,
+  screenshot: null,
+  pageInfo: null,
+  
+  // Viewport state
+  viewport: { width: 1920, height: 1080 },
+  deviceScaleFactor: 1,
+  isMobile: false,
+  
+  // Status
+  status: {
+    action: 'IDLE' as SystemAction,
+    message: 'Ready',
+    type: 'idle' as StatusType
+  },
+  
+  // Editor state
+  editorTabs: [],
+  activeTabId: null,
 
+  // Actions
   setUrl: (url) => set({ url }),
   setLoading: (isLoading) => set({ isLoading }),
   setLaunched: (isLaunched) => set({ isLaunched }),
-  setViewport: (width, height) => set((state) => ({
-    viewport: { ...state.viewport, width, height }
-  })),
-  setDeviceScaleFactor: (scale) => set({ deviceScaleFactor: scale }),
+  setScreenshot: (screenshot) => set({ screenshot }),
+  setPageInfo: (pageInfo) => set({ pageInfo }),
+  setViewport: (width, height) => set({ viewport: { width, height } }),
+  setDeviceScaleFactor: (deviceScaleFactor) => set({ deviceScaleFactor }),
   setMobile: (isMobile) => set({ isMobile }),
-  setStatus: (action, message, type = 'loading') => set({
-    status: {
-      action,
-      message,
-      type,
-      timestamp: Date.now()
-    }
+  setStatus: (action, message, type = 'info') => set({ 
+    status: { action, message, type } 
   }),
 
   // Editor actions
-  setEditorTabs: (tabs) => set({ editorTabs: tabs }),
-  setActiveTabId: (id) => set({ activeTabId: id }),
   addEditorTab: (tab) => set((state) => ({ 
     editorTabs: [...state.editorTabs, tab],
     activeTabId: tab.id
@@ -139,13 +173,11 @@ export const useBrowserStore = create<BrowserState>((set, get) => ({
       tab.id === id ? { ...tab, ...updates } : tab
     )
   })),
-  removeEditorTab: (id) => set((state) => {
-    const newTabs = state.editorTabs.filter(tab => tab.id !== id);
-    return {
-      editorTabs: newTabs,
-      activeTabId: state.activeTabId === id ? (newTabs[0]?.id || null) : state.activeTabId
-    };
-  }),
-
-  reset: () => set(initialState)
+  removeEditorTab: (id) => set((state) => ({
+    editorTabs: state.editorTabs.filter(tab => tab.id !== id),
+    activeTabId: state.activeTabId === id ? 
+      (state.editorTabs.length > 1 ? state.editorTabs[0].id : null) : 
+      state.activeTabId
+  })),
+  setActiveTab: (id) => set({ activeTabId: id })
 })); 

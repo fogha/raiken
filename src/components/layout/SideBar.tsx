@@ -9,13 +9,13 @@ import { DOMNode } from '@/types/dom';
 import { useProjectStore } from '@/store/projectStore';
 
 interface SideBarProps {
-  onNodeSelect: (node: Element | DOMNode) => void;
+  onNodeSelect: (node: DOMNode) => void;
 }
 
 const TreeNode = ({ node, depth = 0, onSelect }: { 
   node: DOMNode; 
   depth?: number;
-  onSelect: (node: Element | DOMNode) => void;
+  onSelect: (node: DOMNode) => void;
 }) => {
   const { setSelectedNode } = useProjectStore();
   const [isExpanded, setIsExpanded] = useState(depth < 2);
@@ -100,7 +100,7 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
     };
-  }, []); // Only run on mount
+  }, [setDomTree]); // setDomTree is stable from Zustand store
 
   return (
     <div className={cn(

@@ -17,7 +17,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { AI_MODELS } from "@/core/testing/services/openrouter.service"
+import { SUPPORTED_MODELS } from "@/core/testing/services/openrouter.service"
 
 export function ModelSelector() {
   const [open, setOpen] = React.useState(false)
@@ -63,7 +63,7 @@ export function ModelSelector() {
   }
 
   // Find the selected model name
-  const selectedModelName = AI_MODELS.find(model => model.id === selectedModel)?.name || "Select Model"
+  const selectedModelName = SUPPORTED_MODELS.find(model => model === selectedModel) || "Select Model"
 
   return (
     <Popover open={open}  onOpenChange={setOpen}>
@@ -83,20 +83,20 @@ export function ModelSelector() {
           <CommandInput placeholder="Search models..." />
           <CommandEmpty>No model found.</CommandEmpty>
           <CommandGroup>
-            {AI_MODELS.map((model) => (
+                            {SUPPORTED_MODELS.map((model) => (
               <CommandItem
-                key={model.id}
-                value={model.id}
+                key={model}
+                value={model}
                 onSelect={onModelSelect}
               >
                 <Check
                   className={cn(
                     "mr-2 h-4 w-4 text-[18px]",
-                    selectedModel === model.id ? "opacity-100" : "opacity-0"
+                    selectedModel === model ? "opacity-100" : "opacity-0"
                   )}
                 />
                 <div className="flex flex-col">
-                  <span>{model.name}</span>
+                  <span>{model}</span>
                 </div>
               </CommandItem>
             ))}

@@ -283,6 +283,73 @@ export class PlaywrightService {
     }
   }
   
+  /**
+   * Take a screenshot of the current page
+   * @param options Screenshot options
+   * @returns Base64 encoded screenshot data URL
+   */
+  async takeScreenshot(options: {
+    fullPage?: boolean;
+    quality?: number;
+    type?: 'png' | 'jpeg';
+    clip?: { x: number; y: number; width: number; height: number };
+  } = {}): Promise<string> {
+    // Make sure browser is initialized before taking screenshot
+    if (!this.browser || !this.page) {
+      await this.initialize();
+    }
+    
+    try {
+      // Ensure page is defined after initialization
+      if (!this.page) {
+        throw new Error('Failed to initialize page');
+      }
+      
+      const screenshotOptions: any = {
+        fullPage: options.fullPage !== false, // Default to full page
+        type: options.type || 'png',
+        clip: options.clip
+      };
+      
+      // Only add quality for JPEG screenshots
+      if (options.type === 'jpeg' && options.quality !== undefined) {
+        screenshotOptions.quality = options.quality;
+      }
+      
+      const screenshot = await this.page.screenshot(screenshotOptions);
+      
+      const base64 = screenshot.toString('base64');
+      return `data:image/${options.type || 'png'};base64,${base64}`;
+    } catch (error) {
+      console.error('Failed to take screenshot:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current page information including URL, title, and viewport
+   */
+  async getPageInfo(): Promise<{
+    url: string;
+    title: string;
+    viewport: { width: number; height: number } | null;
+  }> {
+    if (!this.page) {
+      throw new Error('Page not initialized');
+    }
+    
+    try {
+      const url = this.page.url();
+      const title = await this.page.title();
+      const viewport = this.page.viewportSize();
+      
+      return { url, title, viewport };
+    } catch (error) {
+      console.error('Failed to get page info:', error);
+      throw error;
+    }
+  }
+  
   async executeAction(action: { type: string; selector: string; value?: string; property?: string }): Promise<any> {
     // Make sure browser is initialized before executing actions
     if (!this.browser || !this.page) {
@@ -440,7 +507,6 @@ export class PlaywrightService {
       if (testData.steps && Array.isArray(testData.steps)) {
         for (let i = 0; i < testData.steps.length; i++) {
           const step = testData.steps[i];
-          console.log(`Executing step ${i + 1}: ${step.action}`);
           
           const stepResult = { ...step, success: true, error: null };
           
@@ -490,7 +556,6 @@ export class PlaywrightService {
       if (results.success && testData.assertions && Array.isArray(testData.assertions)) {
         for (let i = 0; i < testData.assertions.length; i++) {
           const assertion = testData.assertions[i];
-          console.log(`Checking assertion ${i + 1}: ${assertion.type}`);
           
           const assertionResult = { ...assertion, success: true, error: null };
           
@@ -656,23 +721,27 @@ export class PlaywrightService {
       }
       
       console.log(`[Arten] Found ${fills.length} fill operations in the test script`);
-      
-      // Execute fill operations
-      for (const { selector, value } of fills) {
-        try {
-          console.log(`[Arten] Filling element: ${selector} with value: ${value}`);
-          await this.page?.fill(selector, value);
-          results.actions.push({ type: 'fill', selector, value, success: true });
-        } catch (error) {
-          console.error(`[Arten] Failed to fill ${selector}:`, error);
-          results.actions.push({ 
-            type: 'fill', 
-            selector, 
-            value, 
-            success: false, 
-            error: error instanceof Error ? error.message : String(error) 
-          });
-          results.success = false;
+         
+      for (const fill of fills) {
+        const selector = fill[1]?.replace(/['"]/g, '');
+        const value = fill[2]?.replace(/['"]/g, '');
+        
+        if (selector && value && this.page) {
+          try {
+            console.log(`[Arten] Filling element: ${selector} with value: ${value}`);
+            await this.page?.fill(selector, value);
+            results.actions.push({ type: 'fill', selector, value, success: true });
+          } catch (error) {
+            console.error(`[Arten] Failed to fill ${selector}:`, error);
+            results.actions.push({ 
+              type: 'fill', 
+              selector, 
+              value, 
+              success: false, 
+              error: error instanceof Error ? error.message : String(error) 
+            });
+            results.success = false;
+          }
         }
       }
       
@@ -741,4 +810,5 @@ export class PlaywrightService {
   }
 }
 
-export default new PlaywrightService();
+const playwrightService = new PlaywrightService();
+export default playwrightService;

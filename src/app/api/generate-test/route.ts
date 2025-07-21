@@ -23,28 +23,9 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
     
-    // Get config from localStorage if available (client-side) or use environment variables (server-side)
-    let apiKey, model;
-    
-    try {
-      // Try to get settings from localStorage
-      if (typeof window !== 'undefined') {
-        const savedConfig = localStorage.getItem('artenConfig');
-        if (savedConfig) {
-          const config = JSON.parse(savedConfig);
-          apiKey = config.api.apiKey;
-          model = config.api.model;
-        }
-      }
-    } catch (error) {
-      console.error('Error accessing localStorage:', error);
-    }
-    
-    // Fall back to environment variables if settings not found in localStorage
-    if (!apiKey) {
-      apiKey = process.env.OPENROUTER_API_KEY;
-      model = 'anthropic/claude-3-sonnet'; // Default model
-    }
+    // Resolve API key / model exclusively from server-side env (no client localStorage)
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    const model  = 'anthropic/claude-3-sonnet'; // Default model
     
     if (!apiKey) {
       return Response.json({ 
@@ -66,13 +47,8 @@ export async function POST(req: Request) {
       domTree
     });
     
-    // Return the generated script
-    return new Response(script, {
-      headers: {
-        'Content-Type': 'text/plain',
-        'Cache-Control': 'no-store'
-      }
-    });
+    // Return the generated script as JSON for easier client parsing
+    return Response.json({ script });
     
   } catch (error) {
     console.error('[API] Test generation error:', error instanceof Error ? error.message : String(error));

@@ -48,6 +48,26 @@ All notable changes to Arten will be documented in this file.
 - **Performance optimizations**: Reduced unnecessary re-renders and improved component efficiency
 - **Documentation**: Enhanced inline documentation and component prop definitions
 
+### ✨ New Features
+- **Video Recording Support**: Added full video recording capabilities for test execution
+  - Videos now record for all tests (passing and failing)
+  - Clickable video files in test reports with direct file access
+  - Configurable through Settings → Playwright → Video Recording toggle
+  - Videos saved to `test-results/temp-execution/` with clear file paths
+
+- **Enhanced Test Reports Display**: Improved test results visualization
+  - Raw Playwright output now displayed for ALL tests (success and failure)
+  - Clickable screenshot attachments with direct file access  
+  - Better visual distinction between successful and failed tests
+  - Cleaner error message extraction from Playwright output
+  - Collapsible detailed views for better organization
+
+### 📁 File Organization
+- Test videos: `test-results/temp-execution/`
+- Test screenshots: `test-results/temp-execution/`
+- Test reports: `test-results/report-*.json`
+- Generated tests: `generated-tests/*.spec.ts`
+
 ## Previous Releases
 
 ### [0.1.0] - Initial Release
