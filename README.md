@@ -2,213 +2,145 @@
 
 Arten is a modern web application testing tool that combines AI with Playwright for automated testing. It provides a visual interface for creating, managing, and executing tests with real-time status tracking, enhanced error handling, and comprehensive test management capabilities.
 
-## 🚀 Recent Progress & Updates
+> 📖 **For complete documentation, see [DOCUMENTATION.md](DOCUMENTATION.md)**
 
-### Enhanced Error Handling & UI Resilience
-- **Improved error handling** with non-intrusive error notifications
-- **Right panel always accessible** even during browser errors
-- **Visual error guidance** to help users understand available features during error states
-- **Better layout stability** with enhanced resizable panel implementation
+## 🚀 Quick Start
 
-### Advanced Test Generation & Management
-- **AI-powered test generation** with JSON-based test specification
-- **Multi-tab test editor** with syntax highlighting and Monaco editor integration
-- **Real-time test validation** with immediate feedback
-- **Automatic test saving** to the `generated-tests/` directory
-- **Enhanced test execution** with configurable browser settings
+### Option 1: CLI Tool (Recommended)
+```bash
+# Install globally
+npm install -g @arten/cli
 
-### Browser Integration & DOM Handling
-- **Real-time DOM tree extraction** and visualization
-- **Visual element selection** with click-to-select functionality
-- **Multi-browser support** (Chromium, Firefox, WebKit)
-- **Enhanced browser lifecycle management** with proper cleanup
-- **Iframe-based browser preview** with sandboxed execution
+# Navigate to your project
+cd my-nextjs-app
 
-## Prerequisites
+# Start Arten (auto-detects project type)
+arten start
+```
 
-- Node.js 18+
-- npm or yarn
-- Modern web browser (Chrome, Firefox, or Safari)
-- OpenAI API key for AI features
-
-## Setup
-
-1. Clone the repository:
+### Option 2: Standalone Web Application
 ```bash
 git clone https://github.com/your-username/arten.git
 cd arten
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Create a `.env.local` file:
-```env
-OPENAI_API_KEY=your_api_key_here
-```
-
-4. Start the development server:
-```bash
+echo "OPENROUTER_API_KEY=your_api_key_here" > .env.local
 npm run dev
 ```
 
-## Core Features
+## ✨ Key Features
 
-### 1. Enhanced Test Builder
-- **JSON-based test specification** with real-time validation
-- **AI-powered test generation** using OpenAI API
-- **Visual element selection** from DOM tree or direct webpage interaction
-- **Test template system** with common patterns (forms, navigation, UI interactions)
-- **Error-resilient interface** that remains functional during browser issues
+- **🤖 AI-Powered Test Generation** - Natural language to Playwright tests
+- **🌐 Multi-Browser Support** - Chromium, Firefox, WebKit
+- **📝 Advanced Test Editor** - Monaco editor with TypeScript support
+- **🔄 Local Integration** - Direct file system access via CLI bridge
+- **📊 Rich Reporting** - Video recording, screenshots, AI-powered analysis
+- **🔔 Smart Notifications** - Non-intrusive floating notifications
+- **⚡ Real-time DOM** - Live DOM extraction and element selection
 
-### 2. Advanced Test Management
-- **Multi-tab test editor** with Monaco editor integration
-- **Test execution with configurable settings** (browser type, retries, timeouts)
-- **Automatic test file management** in `generated-tests/` directory
-- **Test reports generation** with detailed results and error diagnostics
-- **Tab-based workflow** with state persistence
+## 📋 Recent Updates
 
-### 3. Browser Integration
-- **Multi-browser testing** (Chromium, Firefox, WebKit)
-- **Real-time DOM extraction** and tree visualization
-- **Element selection and inspection** with visual feedback
-- **Iframe-based browser preview** for safe page interaction
-- **URL validation and error handling** with user guidance
+### 🎯 Enhanced Bridge Integration
+- **Local file system access** - Tests saved directly to your project
+- **Bridge server authentication** - Secure token-based communication
+- **Project auto-detection** - Supports Next.js, React, Vue, and more
+- **Smart notification system** - Connection status and error handling
 
-### 4. Configuration & Customization
-- **Configurable execution settings** (browser type, timeouts, retries)
-- **Test recording features** (screenshots, video, tracing)
-- **API model selection** for test generation
-- **Persistent configuration** with localStorage integration
-- **Environment-specific settings** for development and CI
+### 🚀 UI/UX Improvements  
+- **Global notification system** - Floating notifications in bottom-right
+- **Always-accessible test builder** - Right panel remains available during errors
+- **Enhanced error handling** - Graceful degradation and recovery
+- **Bridge status monitoring** - Real-time connection status
 
-### 5. Project Structure
+## 🛠️ CLI Tool Benefits
+
+- ✅ **Direct file system access** - writes tests to your project
+- ✅ **Auto-project detection** - supports Next.js, React, Vue, and more
+- ✅ **Zero configuration** - works out of the box
+- ✅ **Offline support** - no cloud dependencies for core features
+- ✅ **Bridge server integration** - seamless hosted platform connectivity
+
+## 🏗️ Architecture
+
 ```
-src/
-├── core/
-│   ├── browser/         # Browser management & UI
-│   │   ├── ui/         # PlaywrightBrowser, browser controls
-│   │   └── services/   # Browser control logic & lifecycle
-│   ├── testing/        # Test generation & management
-│   │   ├── ui/        # TestBuilder, TabbedTestEditor, TestReports
-│   │   ├── services/  # AI generation, OpenRouter integration
-│   │   └── utils/     # Test utilities & validation
-│   └── dom/           # DOM manipulation & tree handling
-├── components/
-│   ├── ui/            # Shadcn UI components (buttons, dialogs, etc.)
-│   └── layout/        # ProjectViewer, SideBar layout components
-├── store/
-│   ├── browserStore.ts    # Browser state & tab management
-│   ├── testStore.ts       # Test generation & execution state
-│   ├── projectStore.ts    # Project-level state (URL, DOM tree)
-│   └── configurationStore.ts # User settings & preferences
-├── app/
-│   └── api/           # Next.js API routes for backend functionality
-└── types/             # TypeScript definitions
+┌─────────────────────────────────────────────────────────────┐
+│                    Arten Architecture                       │
+├─────────────────────────────────────────────────────────────┤
+│  Web UI (Next.js)          │  CLI Bridge Server             │
+│  ├── Test Builder          │  ├── Project Detection         │
+│  ├── Browser Integration   │  ├── File System Access        │
+│  ├── Test Editor          │  └── Local Test Management     │
+│  └── Test Reports         │                                 │
+├─────────────────────────────────────────────────────────────┤
+│               AI Services (OpenRouter)                      │
+│               Playwright (Browser Automation)               │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### 6. Key Components
+## 🔧 Configuration
 
-#### ProjectViewer (Main Layout)
-- **Three-panel layout** with resizable panels
-- **Error-resilient design** with always-accessible test builder
-- **Status bar** with real-time system status
-- **Enhanced error notifications** positioned to not interfere with workflow
+### Environment Variables
+```env
+# Required for AI features
+OPENROUTER_API_KEY=sk-or-v1-xxxxxxxxxxxx
 
-#### PlaywrightBrowser
-- **Multi-tab interface** (Web Page View, Test Editor, Test Manager, Test Reports)
-- **URL navigation** with validation and error handling
-- **DOM tree extraction** with real-time updates
-- **Test execution environment** with configurable settings
+# Optional
+OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
+```
 
-#### TestBuilder
-- **AI-powered test generation** from JSON specifications
-- **Real-time validation** with immediate error feedback
-- **Integration with test management** system
-- **Enhanced error handling** with detailed diagnostics
+### CLI Commands
+```bash
+arten start     # Start web interface
+arten init      # Initialize project
+arten info      # Show project information
+arten remote    # Start bridge server
+```
 
-#### TabbedTestEditor
-- **Monaco editor integration** with TypeScript syntax highlighting
-- **Multi-tab test management** with individual configurations
-- **Real-time test execution** with progress tracking
-- **Test saving and file management** automation
+## 📊 Current Status
 
-## Current Status
+### ✅ Production Ready Features
+- Multi-browser test execution (Chromium, Firefox, WebKit)
+- AI-powered test generation with OpenRouter integration
+- Local file system integration via CLI bridge server
+- Real-time DOM extraction and element selection
+- Monaco editor with TypeScript syntax highlighting
+- Global notification system with auto-hide
+- Test reports with video recording and screenshots
+- Configurable test execution (retries, timeouts, browser selection)
 
-### ✅ Implemented Features
-- Multi-browser support (Chromium, Firefox, WebKit)
-- AI-powered test generation with JSON specifications
-- Tab-based test management with Monaco editor
-- Real-time test execution with detailed reporting
-- Enhanced error handling and UI resilience
-- DOM tree exploration with visual element selection
-- Configurable test execution (browser, retries, timeouts)
-- Automatic test file management and saving
-- Test reports with error diagnostics and screenshots
-
-### 🚧 In Development
-- Test recording capabilities with action capture
-- Advanced test assertions and validation patterns
-- Test suite organization and batch execution
-- Flow-based testing with complex user journeys
-- Network interception and mock data handling
-- Advanced debugging tools and test inspection
-
-### 🎯 Planned Features
-- Test data management and parameterization
-- CI/CD integration with automated test execution
-- Team collaboration features and test sharing
-- Advanced reporting and analytics dashboard
+### 🚧 Active Development
+- Enhanced test suite management
+- Advanced debugging tools
 - Performance testing capabilities
 - Mobile testing support
 
-## Environment Variables
+## 📖 Documentation
 
-Required for development:
-```env
-OPENAI_API_KEY=           # OpenAI API key for test generation
-```
+- **[Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide
+- **[CLI Documentation](cli/README.md)** - CLI tool reference
+- **[Deployment Guide](DEPLOYMENT.md)** - Deployment options
+- **[Architecture Guide](src/STRUCTURE.md)** - Technical details
+- **[Changelog](CHANGELOG.md)** - Recent updates
 
-Optional for enhanced features:
-```env
-BASE_URL=                 # Base URL for test execution
-NODE_ENV=                 # Environment setting (development/production)
-```
-
-## API Endpoints
-
-The application includes several API endpoints for backend functionality:
-
-- `POST /api/generate-test` - AI-powered test generation
-- `POST /api/execute-test` - Test execution with configurable settings
-- `POST /api/save-test` - Automatic test file saving
-- `POST /api/browser` - Browser control and DOM extraction
-- `GET /api/test-reports` - Test results and reporting
-
-## Error Handling & Resilience
-
-Arten includes comprehensive error handling:
-
-- **Non-blocking error notifications** that don't interfere with workflow
-- **Graceful degradation** when browser or network issues occur
-- **Always-accessible test builder** even during page loading errors
-- **Detailed error diagnostics** for test failures and generation issues
-- **Automatic recovery** from temporary browser connection issues
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Commit your changes with descriptive messages
-4. Push to the branch
-5. Open a Pull Request with detailed description
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## License
+See [DOCUMENTATION.md#contributing](DOCUMENTATION.md#contributing) for detailed guidelines.
 
-MIT License - See LICENSE file for details
+## 📄 License
+
+MIT License - See [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- 📧 **Issues:** [GitHub Issues](https://github.com/your-username/arten/issues)
+- 📖 **Documentation:** [DOCUMENTATION.md](DOCUMENTATION.md)
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-username/arten/discussions)
 
 ---
 
-*Arten continues to evolve with regular updates and improvements. Check the project repository for the latest features and bug fixes.*
+*Arten continues to evolve with regular updates and improvements. Check the [changelog](CHANGELOG.md) for the latest features and bug fixes.*

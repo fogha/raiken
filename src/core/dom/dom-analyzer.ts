@@ -40,7 +40,7 @@ export const analyzeDOMTree = (element: Element, root: Element = element): DOMNo
   };
 
   // Process children recursively
-  element.children.forEach(child => {
+  Array.from(element.children).forEach(child => {
     domNode.children.push(analyzeDOMTree(child));
   });
 

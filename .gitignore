@@ -50,3 +50,8 @@ next-env.d.ts
 
 # Temporary config files
 playwright.config.temp.ts
+
+# CLI build artifacts
+/cli/dist/
+/cli/node_modules/
+/cli/*.tsbuildinfo

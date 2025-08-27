@@ -80,14 +80,15 @@ export class OpenRouterService {
    * @param configOrApiKey Configuration options or API key string
    */
   constructor(configOrApiKey: AIServiceConfig | string) {
+    const defaultModel = process.env.OPENROUTER_MODEL || 'anthropic/claude-3.5-sonnet';
     if (typeof configOrApiKey === 'string') {
       this.config = {
         apiKey: configOrApiKey,
-        model: 'anthropic/claude-4-sonnet' // Default model
+        model: defaultModel
       };
     } else {
       this.config = {
-        model: configOrApiKey.model || 'anthropic/claude-4-sonnet',
+        model: configOrApiKey.model || defaultModel,
         apiKey: configOrApiKey.apiKey
       };
     }
@@ -202,11 +203,13 @@ export class OpenRouterService {
    * Get the appropriate headers for the OpenRouter API request
    */
   private getHeaders(): Record<string, string> {
+    const referer = process.env.NEXT_PUBLIC_OPENROUTER_REFERRER || process.env.OPENROUTER_REFERRER || 'https://arten.app';
+    const title = process.env.NEXT_PUBLIC_OPENROUTER_TITLE || process.env.OPENROUTER_TITLE || 'Arten';
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.config.apiKey}`,
-      'HTTP-Referer': '',
-      'X-Title': 'Arten Test Generator'
+      'HTTP-Referer': referer,
+      'X-Title': title
     };
   }
   

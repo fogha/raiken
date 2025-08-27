@@ -19,8 +19,8 @@ function extractTestName(testScript: string): string {
 /**
  * Extract errors from various result formats
  */
-function extractErrors(data: any): Array<{ message: string; location?: any }> {
-  const errors: Array<{ message: string; location?: any }> = [];
+function extractErrors(data: any): Array<{ message: string; stack?: string; location?: any }> {
+  const errors: Array<{ message: string; stack?: string; location?: any }> = [];
   
   if (!data) return errors;
   
@@ -31,7 +31,7 @@ function extractErrors(data: any): Array<{ message: string; location?: any }> {
       stack: data.rawPlaywrightError // The whole stderr is the stack trace
     });
   }
-   
+  
   return errors;
 }
 

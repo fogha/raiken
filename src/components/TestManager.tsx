@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useTestStore } from '@/store/testStore';
+import { useTestStore, type TestFile } from '@/store/testStore';
 import { useBrowserStore } from '@/store/browserStore';
 import { Loader2, Play, RefreshCw, Edit, Trash2 } from 'lucide-react';
 
@@ -85,7 +85,7 @@ export function TestManager() {
 
       {/* Test Files List */}
       <div className="grid gap-4">
-        {testFiles.length === 0 ? (
+        {!Array.isArray(testFiles) || testFiles.length === 0 ? (
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-center">
@@ -94,7 +94,7 @@ export function TestManager() {
             </CardContent>
           </Card>
         ) : (
-          testFiles.map((file) => (
+          testFiles.map((file: TestFile) => (
             <Card key={file.path}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">

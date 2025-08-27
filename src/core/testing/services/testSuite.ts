@@ -214,7 +214,7 @@ export class TestSuiteManager {
       
       // Simple success determination - if exit code is 0, test passed
       const success = exitCode === 0;
-        
+       
       // Read test script
       const testScript = await fs.readFile(path.resolve(process.cwd(), execution.testPath), 'utf8');
 

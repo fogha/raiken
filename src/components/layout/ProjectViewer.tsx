@@ -5,6 +5,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '../ui/resi
 import { TestBuilder } from '@/core/testing/ui/TestBuilder';
 import { PlaywrightBrowser } from '@/core/browser/ui/PlaywrightBrowser';
 import { ThemeToggle } from "../ui/theme-toggle";
+import { LocalBridgeStatus } from '../LocalBridgeStatus';
+import { NotificationContainer } from '../NotificationContainer';
 
 // Import DOMNode interface
 import type { DOMNode } from '@/types/dom';
@@ -133,7 +135,7 @@ const ProjectViewer = () => {
 
                 {/* Tab content - only Test Builder */}
                 <div className="flex-1 overflow-hidden">
-                  <div className="h-full overflow-auto px-2 pt-4 bg-background">
+                  <div className="h-full overflow-auto px-2 pt-4 bg-background space-y-4">
                     <TestBuilder
                       selectedNode={selectedNode}
                       onTestGenerated={handleTestGenerated}
@@ -161,6 +163,10 @@ const ProjectViewer = () => {
             <span className="ml-auto text-primary-foreground/60 font-medium">Arten</span>
           </div>
         </div>
+        
+        {/* Floating Local Bridge Status Notification */}
+        <LocalBridgeStatus />
+        <NotificationContainer />
       </div>
     </div>
   );

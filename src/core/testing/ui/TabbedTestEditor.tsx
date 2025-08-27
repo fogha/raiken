@@ -30,11 +30,14 @@ export function TabbedTestEditor() {
     setActiveTab,
   } = useBrowserStore();
 
-  const { runTest, isRunning } = useTestStore();
+  const { runTest, runningTests } = useTestStore();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
   // Get the active tab data - safely handle null case
   const activeTab = activeTabId ? editorTabs.find(tab => tab.id === activeTabId) : null;
+  
+  // Check if any test is currently running
+  const isRunning = Object.values(runningTests).some(running => running);
 
   // Handle tab operations
   const handleAddTab = () => {

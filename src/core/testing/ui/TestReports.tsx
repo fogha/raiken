@@ -317,7 +317,7 @@ export function TestReports() {
                         const playWrightOutput = (report as any).rawPlaywrightOutput;
                         if (playWrightOutput) {
                           const outputData = JSON.parse(playWrightOutput);
-                          const videos = [];
+                          const videos: Array<{name: string; path: string; contentType: string}> = [];
                           
                           // Extract video paths from Playwright output
                           if (outputData.suites) {
@@ -380,7 +380,7 @@ export function TestReports() {
                         const playWrightOutput = (report as any).rawPlaywrightOutput;
                         if (playWrightOutput) {
                           const outputData = JSON.parse(playWrightOutput);
-                          const screenshots = [];
+                          const screenshots: Array<{name: string; path: string; contentType: string}> = [];
                           
                           // Extract screenshot paths from Playwright output
                           if (outputData.suites) {

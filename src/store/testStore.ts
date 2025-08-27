@@ -1,6 +1,7 @@
 import { createSlice } from './createSlice';
 import { useBrowserStore } from './browserStore';
 import { useConfigurationStore } from './configurationStore';
+import { localBridge } from '@/lib/local-bridge';
 
 interface TestTab {
   id: string;
@@ -13,7 +14,7 @@ interface TestTab {
   };
 }
 
-interface TestFile {
+export interface TestFile {
   name: string;
   path: string;
   content: string;
@@ -87,7 +88,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   setResults: (results) => set({ results }),
   setGenerationError: (error) => set({ generationError: error }),
   addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
-  setTestFiles: (files) => set({ testFiles: files }),
+  setTestFiles: (files) => set({ testFiles: Array.isArray(files) ? files : [] }),
   setIsLoadingFiles: (loading) => set({ isLoadingFiles: loading }),
   
   // Complex actions
@@ -138,9 +139,29 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   
   runTest: async (testPath?: string) => {
     const state = get();
+    // Determine path to execute:
+    // 1) explicit param
+    // 2) most recently saved file from server response cached in testFiles
+    // 3) fallback to last generated test name
+    let pathToExecute = testPath;
+    if (!pathToExecute) {
+      const latest = Array.isArray(state.testFiles) && state.testFiles.length > 0
+        ? state.testFiles[0]
+        : null;
+      if (latest?.path) {
+        pathToExecute = latest.path;
+      } else {
+        // Fallback: derive from last generated test name
+        try {
+          const spec = JSON.parse(state.jsonTestScript || '{}');
+          const base = (spec.name || 'test').toString().replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          pathToExecute = `generated-tests/${base}.spec.ts`;
+        } catch {
+          pathToExecute = 'generated-tests/test.spec.ts';
+        }
+      }
+    }
     
-    // Use provided testPath or default to the most recent generated test
-    const pathToExecute = testPath || `generated-tests/${state.tabs[state.tabs.length - 1]?.name || 'test'}.spec.ts`;
     state.setTestRunning(pathToExecute, true);
     
     try {
@@ -171,6 +192,8 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
 
       const { results: testResults, success, resultFile, summary, needsAIAnalysis, suiteId } = await response.json();
       state.setResults(testResults);
+      // Refresh local cache of files after execution in case retries or artifacts changed
+      state.loadTestFiles();
 
       // Update browser status for toast notifications
       const browserStore = useBrowserStore.getState();
@@ -210,25 +233,43 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       // Use the test name from the JSON without adding timestamp
       // Timestamp will only be added for completely new tests via TestBuilder
       const testName = testSpec.name || 'Generated Test';
+      const testContent = state.generatedTests[state.generatedTests.length - 1];
+      const filename = `${testName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}.spec.ts`;
       
-      // Save the test script to the generated-tests folder via API
-      const saveResponse = await fetch('/api/save-test', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: testName,
-          content: state.generatedTests[state.generatedTests.length - 1] // Use the last generated script
-        }),
-      });
+      // Try to save via local CLI first, then fallback to server
+      if (localBridge.isConnected()) {
+        console.log('[Arten] 💾 Saving test via local CLI...');
+        const result = await localBridge.saveTestToLocal(testContent, filename);
+        
+        if (result.success) {
+          console.log(`[Arten] ✅ Test saved locally: ${result.path}`);
+        } else {
+          console.warn('[Arten] ⚠️ Local CLI save failed, falling back to server:', result.error);
+          // Continue to fallback below
+        }
+      }
+      
+      if (!localBridge.isConnected()) {
+        // Fallback: Save via hosted server (existing behavior)
+        console.log('[Arten] 💾 Saving test via hosted server...');
+        const saveResponse = await fetch('/api/save-test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: testName,
+            content: testContent
+          }),
+        });
 
-      if (!saveResponse.ok) {
-        const saveError = await saveResponse.json();
-        console.warn('[Arten] Failed to save test script:', saveError.error);
-      } else {
-        const saveResult = await saveResponse.json();
-        console.log('[Arten] Test script saved to:', saveResult.filePath);
+        if (!saveResponse.ok) {
+          const saveError = await saveResponse.json();
+          console.warn('[Arten] Failed to save test script:', saveError.error);
+        } else {
+          const saveResult = await saveResponse.json();
+          console.log('[Arten] Test script saved to:', saveResult.filePath);
+        }
       }
       
       // Add to test scripts array
@@ -249,6 +290,9 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       
       browserStore.addEditorTab(newTab);
       
+      // Refresh list of test files so runTest can pick up latest saved path
+      await state.loadTestFiles();
+
       // Switch to Tests tab after a short delay to ensure UI is ready
       setTimeout(() => {
         const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
@@ -265,8 +309,35 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   deleteTestFile: async (testPath: string) => {
     const state = get();
     try {
-      const response = await fetch('/api/delete-test', {
-        method: 'POST',
+      // Try to delete via local CLI first, then fallback to server
+      if (localBridge.isConnected()) {
+        console.log('[Arten] 🗑️ Deleting test via local CLI...');
+        const connection = localBridge.getConnectionInfo();
+        if (connection) {
+          const response = await fetch(`${connection.url}/api/delete-test`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${connection.token}`
+            },
+            body: JSON.stringify({ testPath })
+          });
+          
+          if (response.ok) {
+            console.log(`[Arten] ✅ Test deleted locally: ${testPath}`);
+            state.loadTestFiles(); // Refresh list
+            return;
+          } else {
+            console.warn('[Arten] ⚠️ Local CLI delete failed, falling back to server');
+            // Continue to fallback below
+          }
+        }
+      }
+      
+      // Fallback: Delete via hosted server (unified endpoint)
+      console.log('[Arten] 🗑️ Deleting test via hosted server...');
+      const response = await fetch('/api/test-files', {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -291,13 +362,39 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     state.setIsLoadingFiles(true);
     
     try {
+      // Try to load via local CLI first, then fallback to server
+      if (localBridge.isConnected()) {
+        console.log('[Arten] 📁 Loading tests via local CLI...');
+        const result = await localBridge.getLocalTestFiles();
+        
+        if (result.success && result.files && Array.isArray(result.files)) {
+          console.log(`[Arten] ✅ Loaded ${result.files.length} tests from local project`);
+          state.setTestFiles(result.files);
+          return;
+        } else {
+          console.warn('[Arten] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
+          // Continue to fallback below
+        }
+      }
+      
+      // Fallback: Load via hosted server (existing behavior)
+      console.log('[Arten] 📁 Loading tests via hosted server...');
       const response = await fetch('/api/test-files');
       
       if (!response.ok) {
         throw new Error('Failed to load test files');
       }
       
-      const { files } = await response.json();
+      const data = await response.json();
+      const files = data.files || [];
+      
+      // Ensure files is an array
+      if (!Array.isArray(files)) {
+        console.error('[Arten] ⚠️ API returned non-array for files:', files);
+        state.setTestFiles([]);
+        return;
+      }
+      
       state.setTestFiles(files);
       
       console.log(`[Arten] Loaded ${files.length} test files from folder`);

@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { localBridge } from '@/lib/local-bridge';
 
 // Directory for test scripts
 export const TEST_SCRIPTS_DIR = 'generated-tests';
@@ -11,6 +12,41 @@ export interface TestFile {
 }
 
 export async function saveTestScript(name: string, content: string, tabId?: string): Promise<string> {
+  // First, try to save via local bridge - detect if not already connected
+  let bridgeConnection = localBridge.getConnectionInfo();
+  if (!bridgeConnection) {
+    console.log(`[Arten] No bridge connection found, attempting to detect local CLI...`);
+    bridgeConnection = await localBridge.detectLocalCLI();
+  }
+
+  if (bridgeConnection && localBridge.isConnected()) {
+    try {
+      // Generate safe filename for bridge
+      const safeName = name
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '');
+      
+      const filename = tabId ? `${safeName}_${tabId}.spec.ts` : `${safeName}.spec.ts`;
+      
+      console.log(`[Arten] Attempting to save to local bridge: ${filename}`);
+      const result = await localBridge.saveTestToLocal(content, filename, tabId);
+      
+      if (result.success && result.path) {
+        console.log(`[Arten] Test script saved to local project: ${result.path}`);
+        return result.path;
+      } else {
+        console.warn(`[Arten] Local bridge save failed: ${result.error}, falling back to local save`);
+      }
+    } catch (error) {
+      console.warn(`[Arten] Local bridge error: ${error}, falling back to local save`);
+    }
+  } else {
+    console.log(`[Arten] No local bridge connection available, saving locally`);
+  }
+
+  // Fallback: Save locally to generated-tests directory
   // Generate safe filename
   const safeName = name
     .toLowerCase()
@@ -40,7 +76,7 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
     filename = `${safeName}.spec.ts`;
     filePath = path.join(TEST_SCRIPTS_DIR, filename);
   }
-   
+  
   try {
     // Ensure the directory exists
     if (!fs.existsSync(TEST_SCRIPTS_DIR)) {
@@ -119,7 +155,7 @@ export async function getTestScript(filePath: string): Promise<TestFile | null> 
       throw new Error('Invalid file path');
     }
     
-    const response = await fetch(`/api/test-files?directory=${directory}&filename=${filename}`);
+    const response = await fetch(`/api/test-files?directory=${encodeURIComponent(directory)}&filename=${encodeURIComponent(filename)}`);
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -155,7 +191,7 @@ export async function deleteTestScript(filePath: string): Promise<boolean> {
       throw new Error('Invalid file path');
     }
     
-    const response = await fetch(`/api/test-files?directory=${directory}&filename=${filename}`, {
+    const response = await fetch(`/api/test-files?directory=${encodeURIComponent(directory)}&filename=${encodeURIComponent(filename)}` , {
       method: 'DELETE'
     });
     

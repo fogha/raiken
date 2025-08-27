@@ -1,5 +1,4 @@
 import { OpenRouterService } from './openrouter.service';
-import { TestResult, DetailedError } from '@/types/test';
 import fs from 'fs';
 import path from 'path';
 
@@ -74,22 +73,7 @@ export class ReportsService {
     return completeReport;
   }
   
-  /**
-   * Determine the overall status of the test based on results
-   */
-  private determineStatus(results: TestResult[]): 'success' | 'failure' | 'partial' {
-    if (results.length === 0) {
-      return 'failure';
-    }
-    
-    const allSuccess = results.every(result => result.success);
-    const allFailure = results.every(result => !result.success);
-    
-    if (allSuccess) return 'success';
-    if (allFailure) return 'failure';
-    return 'partial';
-  }
-  
+  // Note: determineStatus removed as unused after pipeline changes
   private async generateSummary(
     testScript: string, 
     rawPlaywrightOutput: string, 

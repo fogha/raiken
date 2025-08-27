@@ -8,7 +8,7 @@ import { TestScriptEditor } from './TestScriptEditor';
 import { cn } from "@/lib/utils";
 import { useTestStore } from '@/store/testStore';
 import { useBrowserStore } from '@/store/browserStore';
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useNotificationStore } from '@/store/notificationStore';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 
 interface TestBuilderProps {
@@ -28,6 +28,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
   } = useTestStore();
 
   const { setStatus } = useBrowserStore();
+  const { addNotification } = useNotificationStore();
 
   // Local UI state
   const [isConfigOpen, setIsConfigOpen] = useState(true);
@@ -117,26 +118,29 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     }
   };
 
+  // Handle validation and generation errors with notifications
+  useEffect(() => {
+    if (validationError) {
+      addNotification({
+        type: 'error',
+        title: 'Validation Error',
+        message: validationError,
+      });
+    }
+  }, [validationError, addNotification]);
+
+  useEffect(() => {
+    if (generationError) {
+      addNotification({
+        type: 'error',
+        title: 'Generation Error', 
+        message: generationError,
+      });
+    }
+  }, [generationError, addNotification]);
+
   return (
     <div className="max-w-full overflow-x-hidden">
-      {/* Validation Error Alert */}
-      {validationError && (
-        <Alert variant="destructive" className="mb-4">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Validation Error</AlertTitle>
-          <AlertDescription>{validationError}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Generation Error Alert */}
-      {generationError && (
-        <Alert variant="destructive" className="mb-4">
-          <XCircle className="h-4 w-4" />
-          <AlertTitle>Generation Error</AlertTitle>
-          <AlertDescription>{generationError}</AlertDescription>
-        </Alert>
-      )}
-
       {/* Test Script Editor */}
       <div className="flex mt-4 gap-4 flex-col w-full">
         <TestScriptEditor

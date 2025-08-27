@@ -721,26 +721,26 @@ export class PlaywrightService {
       }
       
       console.log(`[Arten] Found ${fills.length} fill operations in the test script`);
-         
+      
       for (const fill of fills) {
-        const selector = fill[1]?.replace(/['"]/g, '');
-        const value = fill[2]?.replace(/['"]/g, '');
+        const selector = fill.selector?.replace(/['"]/g, '');
+        const value = fill.value?.replace(/['"]/g, '');
         
         if (selector && value && this.page) {
-          try {
-            console.log(`[Arten] Filling element: ${selector} with value: ${value}`);
-            await this.page?.fill(selector, value);
-            results.actions.push({ type: 'fill', selector, value, success: true });
-          } catch (error) {
-            console.error(`[Arten] Failed to fill ${selector}:`, error);
-            results.actions.push({ 
-              type: 'fill', 
-              selector, 
-              value, 
-              success: false, 
-              error: error instanceof Error ? error.message : String(error) 
-            });
-            results.success = false;
+        try {
+          console.log(`[Arten] Filling element: ${selector} with value: ${value}`);
+          await this.page?.fill(selector, value);
+          results.actions.push({ type: 'fill', selector, value, success: true });
+        } catch (error) {
+          console.error(`[Arten] Failed to fill ${selector}:`, error);
+          results.actions.push({ 
+            type: 'fill', 
+            selector, 
+            value, 
+            success: false, 
+            error: error instanceof Error ? error.message : String(error) 
+          });
+          results.success = false;
           }
         }
       }
