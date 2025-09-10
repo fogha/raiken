@@ -11,7 +11,13 @@
     "test:debug": "playwright test --debug",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report test-results/html-report",
-    "test:single": "node scripts/run-test.js"
+    "test:single": "node scripts/run-test.js",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up app --build -d",
+    "docker:test": "docker-compose --profile test up --build playwright",
+    "docker:down": "docker-compose down",
+    "docker:clean": "docker-compose down -v --rmi all",
+    "docker:logs": "docker-compose logs -f"
   },
   "dependencies": {
     "@langchain/core": "^0.3.40",

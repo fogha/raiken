@@ -1,0 +1,27 @@
+services:
+  # Production Next.js application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+  # Playwright testing
+  playwright:
+    build:
+      context: .
+      dockerfile: Dockerfile.playwright
+    volumes:
+      - ./generated-tests:/app/generated-tests
+      - ./test-results:/app/test-results
+      - ./playwright.config.ts:/app/playwright.config.ts
+    environment:
+      - NODE_ENV=test
+      - BASE_URL=http://host.docker.internal:3000
+    network_mode: host
+    profiles:
+      - test

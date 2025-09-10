@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Enable standalone build for Docker
+  output: 'standalone',
+  
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
