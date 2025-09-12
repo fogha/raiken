@@ -1,6 +1,6 @@
 {
   "name": "@raiken/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publishConfig": {
     "access": "public"
   },
@@ -20,7 +20,6 @@
     "dev": "tsc --watch",
     "prepublishOnly": "npm run build",
     "changelog": "auto-changelog --package --template keepachangelog"
-
   },
   "keywords": [
     "playwright",
@@ -62,4 +61,4 @@
     "url": "https://github.com/yourusername/raiken/issues"
   },
   "homepage": "https://raiken.dev"
-} 
+}
