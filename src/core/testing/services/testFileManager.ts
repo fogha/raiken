@@ -15,7 +15,7 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
   // First, try to save via local bridge - detect if not already connected
   let bridgeConnection = localBridge.getConnectionInfo();
   if (!bridgeConnection) {
-    console.log(`[Arten] No bridge connection found, attempting to detect local CLI...`);
+    console.log(`[Raiken] No bridge connection found, attempting to detect local CLI...`);
     bridgeConnection = await localBridge.detectLocalCLI();
   }
 
@@ -30,20 +30,20 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
       
       const filename = tabId ? `${safeName}_${tabId}.spec.ts` : `${safeName}.spec.ts`;
       
-      console.log(`[Arten] Attempting to save to local bridge: ${filename}`);
+      console.log(`[Raiken] Attempting to save to local bridge: ${filename}`);
       const result = await localBridge.saveTestToLocal(content, filename, tabId);
       
       if (result.success && result.path) {
-        console.log(`[Arten] Test script saved to local project: ${result.path}`);
+        console.log(`[Raiken] Test script saved to local project: ${result.path}`);
         return result.path;
       } else {
-        console.warn(`[Arten] Local bridge save failed: ${result.error}, falling back to local save`);
+        console.warn(`[Raiken] Local bridge save failed: ${result.error}, falling back to local save`);
       }
     } catch (error) {
-      console.warn(`[Arten] Local bridge error: ${error}, falling back to local save`);
+      console.warn(`[Raiken] Local bridge error: ${error}, falling back to local save`);
     }
   } else {
-    console.log(`[Arten] No local bridge connection available, saving locally`);
+    console.log(`[Raiken] No local bridge connection available, saving locally`);
   }
 
   // Fallback: Save locally to generated-tests directory
@@ -64,12 +64,12 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
       // Update the existing file
       filename = path.basename(existingFile);
       filePath = existingFile;
-      console.log(`[Arten] Updating existing file for tab ${tabId}: ${filePath}`);
+      console.log(`[Raiken] Updating existing file for tab ${tabId}: ${filePath}`);
     } else {
       // Create new file with tab ID
       filename = `${safeName}_${tabId}.spec.ts`;
       filePath = path.join(TEST_SCRIPTS_DIR, filename);
-      console.log(`[Arten] Creating new file for tab ${tabId}: ${filePath}`);
+      console.log(`[Raiken] Creating new file for tab ${tabId}: ${filePath}`);
     }
   } else {
     // No tab ID, create a simple filename
@@ -85,11 +85,11 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
     
     // Write the test script to file
     fs.writeFileSync(filePath, content);
-    console.log(`[Arten] Test script saved to ${filePath}`);
+    console.log(`[Raiken] Test script saved to ${filePath}`);
     
     return filePath;
   } catch (error) {
-    console.error('[Arten] Error saving test script:', error);
+    console.error('[Raiken] Error saving test script:', error);
     throw error;
   }
 }
@@ -110,7 +110,7 @@ function findExistingFileForTab(tabId: string): string | null {
     
     return existingFile ? path.join(TEST_SCRIPTS_DIR, existingFile) : null;
   } catch (error) {
-    console.error('[Arten] Error finding existing file for tab:', error);
+    console.error('[Raiken] Error finding existing file for tab:', error);
     return null;
   }
 }
@@ -136,7 +136,7 @@ export async function listTestScripts(): Promise<{ name: string; path: string; c
         };
       });
   } catch (error) {
-    console.error('[Arten] Error listing test scripts:', error);
+    console.error('[Raiken] Error listing test scripts:', error);
     return [];
   }
 }
@@ -155,7 +155,7 @@ export async function getTestScript(filePath: string): Promise<TestFile | null> 
       throw new Error('Invalid file path');
     }
     
-    const response = await fetch(`/api/test-files?directory=${encodeURIComponent(directory)}&filename=${encodeURIComponent(filename)}`);
+    const response = await fetch(`/api/v1/tests?action=list`);
     
     if (!response.ok) {
       if (response.status === 404) {
@@ -191,7 +191,7 @@ export async function deleteTestScript(filePath: string): Promise<boolean> {
       throw new Error('Invalid file path');
     }
     
-    const response = await fetch(`/api/test-files?directory=${encodeURIComponent(directory)}&filename=${encodeURIComponent(filename)}` , {
+    const response = await fetch(`/api/v1/tests?path=${encodeURIComponent(filePath)}`, {
       method: 'DELETE'
     });
     

@@ -11,7 +11,7 @@ const program = new Command();
 async function checkInstallation() {
   try {
     const { execSync } = require('child_process');
-    execSync('which arten', { stdio: 'ignore' });
+    execSync('which raiken', { stdio: 'ignore' });
   } catch {
     console.log(chalk.yellow('\n⚠️  Installation note:'));
     console.log(chalk.gray('   Make sure to add npm global bin directory to your PATH:'));
@@ -26,17 +26,17 @@ program
 
 program
   .command('init')
-  .description('Initialize Arten in the current project (run this in your target project root)')
+  .description('Initialize Raiken in the current project (run this in your target project root)')
   .option('--force', 'Overwrite existing configuration')
   .action(async (options) => {
-    console.log(chalk.blue('🎭 Initializing Arten...'));
+    console.log(chalk.blue('🎭 Initializing Raiken...'));
     
     try {
       await initializeProject(process.cwd(), options.force);
-      console.log(chalk.green('✅ Arten initialization complete!'));
+      console.log(chalk.green('✅ Raiken initialization complete!'));
       console.log(chalk.cyan('\n💡 Next steps:'));
-      console.log(chalk.gray('   1. Run "arten remote" to start the bridge server'));
-      console.log(chalk.gray('   2. Open the hosted Arten platform'));
+      console.log(chalk.gray('   1. Run "raiken remote" to start the bridge server'));
+      console.log(chalk.gray('   2. Open the hosted Raiken platform'));
       console.log(chalk.gray('   3. Generate tests - they will be saved directly to your project'));
     } catch (error) {
       console.error(chalk.red('❌ Initialization failed:'), error instanceof Error ? error.message : error);
@@ -46,16 +46,16 @@ program
 
 program
   .command('start')
-  .description('Start Arten bridge server (initializes project if needed)')
+  .description('Start Raiken bridge server (initializes project if needed)')
   .option('-p, --port <port>', 'Port to run the server on', '3460')
   .option('--init', 'Run initialization first if not already initialized')
   .action(async (options) => {
-    console.log(chalk.blue('🎭 Starting Arten...'));
+    console.log(chalk.blue('🎭 Starting Raiken...'));
     
     // Check if project is initialized
     const fs = require('fs');
     const path = require('path');
-    const configPath = path.join(process.cwd(), 'arten.config.json');
+    const configPath = path.join(process.cwd(), 'raiken.config.json');
     
     if (!fs.existsSync(configPath)) {
       if (options.init) {
@@ -69,14 +69,14 @@ program
       } else {
         console.log(chalk.red('❌ Project not initialized!'));
         console.log(chalk.cyan('💡 Run one of these commands:'));
-        console.log(chalk.gray('   - "arten init" to initialize the project'));
-        console.log(chalk.gray('   - "arten start --init" to initialize and start'));
+        console.log(chalk.gray('   - "raiken init" to initialize the project'));
+        console.log(chalk.gray('   - "raiken start --init" to initialize and start'));
         process.exit(1);
       }
     }
     
     // Start the bridge server
-    console.log(chalk.blue('🎭 Starting Arten bridge server...'));
+    console.log(chalk.blue('🎭 Starting Raiken bridge server...'));
     console.log(chalk.yellow('⚠️  This allows the hosted platform to save tests to your local project'));
     
     // Detect the current project
@@ -99,15 +99,15 @@ program
     // Check if project is initialized
     const fs = require('fs');
     const path = require('path');
-    const configPath = path.join(process.cwd(), 'arten.config.json');
+    const configPath = path.join(process.cwd(), 'raiken.config.json');
     
     if (!fs.existsSync(configPath)) {
       console.log(chalk.red('❌ Project not initialized!'));
-      console.log(chalk.cyan('💡 Run "arten init" first to set up the project'));
+      console.log(chalk.cyan('💡 Run "raiken init" first to set up the project'));
       process.exit(1);
     }
     
-    console.log(chalk.blue('🎭 Starting Arten bridge server...'));
+    console.log(chalk.blue('🎭 Starting Raiken bridge server...'));
     console.log(chalk.yellow('⚠️  This allows the hosted platform to save tests to your local project'));
     
     // Detect the current project
@@ -128,7 +128,7 @@ program
   .action(async () => {
     const projectInfo = await detectProject(process.cwd());
     
-    console.log(chalk.blue('\n🎭 Arten Project Information\n'));
+    console.log(chalk.blue('\n🎭 Raiken Project Information\n'));
     console.log(`${chalk.bold('Project Name:')} ${projectInfo.name}`);
     console.log(`${chalk.bold('Project Type:')} ${projectInfo.type}`);
     console.log(`${chalk.bold('Test Directory:')} ${projectInfo.testDir}`);
@@ -141,7 +141,7 @@ program
     }
   });
 
-program.parseAsync().then(() => {
+program.parseAsync(process.argv).then(() => {
   if (process.argv.length === 2) {
     checkInstallation();
   }
@@ -159,6 +159,4 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => {
   console.error(chalk.red('Unhandled promise rejection:'), reason);
   process.exit(1);
-});
-
-program.parse(); 
+}); 

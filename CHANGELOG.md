@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Arten will be documented in this file.
+All notable changes to Raiken will be documented in this file.
 
 ## [Unreleased] - 2024-12-XX
 

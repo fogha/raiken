@@ -73,7 +73,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     }
 
     if (initialGeneratedTest && (!editorTabs.some(tab => tab.content === initialGeneratedTest))) {
-      console.log('[Arten] Adding new tab with generated test');
+      console.log('[Raiken] Adding new tab with generated test');
       const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
       const testName = `Generated Test ${timestamp}`;
       
@@ -90,13 +90,13 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       };
       
       addEditorTab(newTab);
-      console.log('[Arten] Created new tab:', newTab.id);
+      console.log('[Raiken] Created new tab:', newTab.id);
 
       // Switch to the Tests tab and wait for it to be available
       setTimeout(() => {
         const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
         if (testsTabTrigger) {
-          console.log('[Arten] Switching to Tests tab');
+          console.log('[Raiken] Switching to Tests tab');
           testsTabTrigger.click();
         }
       }, 100);
@@ -108,12 +108,12 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     // Attempt to initialize browser on component mount, but only if not already launched
     const initBrowser = async () => {
       if (isLaunched) {
-        console.log('[Arten] Browser already launched, skipping initialization');
+        console.log('[Raiken] Browser already launched, skipping initialization');
         return;
       }
 
       try {
-        console.log('[Arten] Initializing browser on component mount...');
+        console.log('[Raiken] Initializing browser on component mount...');
         setStatus('BROWSER_INITIALIZING' as SystemAction, 'Initializing browser...');
         const response = await fetch('/api/browser', {
           method: 'POST',
@@ -123,15 +123,20 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
         
         const data = await response.json();
         if (data.success) {
-          console.log('[Arten] Browser initialized successfully on mount');
+          console.log('[Raiken] Browser initialized successfully on mount');
           setLaunched(true);
           setStatus('BROWSER_READY' as SystemAction, 'Browser ready', 'success');
+          // Clear status after showing success briefly
+          setTimeout(() => {
+            const { clearStatus } = useBrowserStore.getState();
+            clearStatus();
+          }, 2000);
         } else {
-          console.error('[Arten] Browser initialization failed:', data.error);
+          console.error('[Raiken] Browser initialization failed:', data.error);
           setStatus('BROWSER_ERROR' as SystemAction, `Browser initialization failed: ${data.error}`, 'error');
         }
       } catch (error) {
-        console.error('[Arten] Browser initialization error:', error);
+        console.error('[Raiken] Browser initialization error:', error);
         setStatus('BROWSER_ERROR' as SystemAction, `Browser initialization error: ${error instanceof Error ? error.message : String(error)}`, 'error');
       }
     };
@@ -141,7 +146,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     // Cleanup function to close browser when component unmounts
     return () => {
       if (isLaunched) {
-        console.log('[Arten] Closing browser on component unmount...');
+        console.log('[Raiken] Closing browser on component unmount...');
         setStatus('BROWSER_CLOSING' as SystemAction, 'Closing browser...');
         fetch('/api/browser', {
           method: 'POST',
@@ -187,6 +192,11 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       setLaunched(true);
       setStatus('BROWSER_READY' as SystemAction, 'Browser ready', 'success');
+      // Clear status after showing success briefly
+      setTimeout(() => {
+        const { clearStatus } = useBrowserStore.getState();
+        clearStatus();
+      }, 2000);
       console.log('Browser initialized successfully');
       
       // Navigate to URL
@@ -209,6 +219,11 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       setUrl(inputUrl);
       setStatus('NAVIGATION_SUCCESS' as SystemAction, `Navigated to ${inputUrl}`, 'success');
+      // Clear status after showing success briefly
+      setTimeout(() => {
+        const { clearStatus } = useBrowserStore.getState();
+        clearStatus();
+      }, 3000);
       console.log('Navigation successful');
 
       // Take screenshot after navigation
@@ -251,6 +266,11 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       setDomTree(data.domTree);
       setStatus('DOM_UPDATED' as SystemAction, 'DOM tree updated', 'success');
+      // Clear status after showing success briefly
+      setTimeout(() => {
+        const { clearStatus } = useBrowserStore.getState();
+        clearStatus();
+      }, 2000);
       
       if (onDOMTreeUpdate) {
         onDOMTreeUpdate(data.domTree);
@@ -292,6 +312,11 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       
       setScreenshot(data.screenshot);
       setStatus('SCREENSHOT_TAKEN' as SystemAction, 'Screenshot taken', 'success');
+      // Clear status after showing success briefly
+      setTimeout(() => {
+        const { clearStatus } = useBrowserStore.getState();
+        clearStatus();
+      }, 2000);
       
     } catch (err: any) {
       console.error('Error taking screenshot:', err);

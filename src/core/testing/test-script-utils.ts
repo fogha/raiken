@@ -12,13 +12,13 @@ export function convertToRunnableScript(testSpec: any): string {
   const spec = typeof testSpec === 'string' ? JSON.parse(testSpec) : testSpec;
   
   // Extract test name and URL
-  const testName = spec.name || 'Arten Generated Test';
+  const testName = spec.name || 'Raiken Generated Test';
   const url = spec.url || 'http://localhost:3000';
   
   // Generate a proper Playwright test script
   const script = `
 /**
- * Arten Generated Test
+ * Raiken Generated Test
  * Generated on: ${new Date().toISOString()}
  */
 import { test, expect } from '@playwright/test';

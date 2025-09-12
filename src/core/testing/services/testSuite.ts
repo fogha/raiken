@@ -1,9 +1,8 @@
 // child_process.spawn is imported dynamically inside executeTest
 import fs from 'fs/promises';
 import path from 'path';
-import { createPlaywrightConfig, cleanupConfig } from '@/app/api/execute-test/create-config';
+import { createPlaywrightConfig, cleanupConfig } from '@/utils/playwright-config';
 import { ReportsService } from './reports.service';
-import { TestResult, DetailedError } from '@/types/test';
 
 interface TestSuiteConfig {
   id: string;
@@ -195,7 +194,7 @@ export class TestSuiteManager {
         stderrBuf += chunk.toString();
         // Stream errors to console in real-time for quicker feedback
         if (process.env.NODE_ENV !== 'test') {
-          process.stderr.write(chunk);
+          process.stderr.write(chunk.toString());
         }
       });
 
@@ -440,6 +439,7 @@ export class TestSuiteManager {
       newestSuite
     };
   }
+
 
   /**
    * Cleanup all resources

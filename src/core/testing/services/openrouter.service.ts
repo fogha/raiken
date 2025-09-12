@@ -93,7 +93,7 @@ export class OpenRouterService {
       };
     }
     
-    console.log(`[Arten] Initialized OpenRouter service with model: ${this.config.model}`);
+    console.log(`[Raiken] Initialized OpenRouter service with model: ${this.config.model}`);
   }
   
   /**
@@ -112,7 +112,7 @@ export class OpenRouterService {
    * Generate a test script using the OpenRouter API
    */
   async generateTestScript(input: any): Promise<string> {
-    console.log(`[Arten] Starting test script generation with OpenRouter`);
+    console.log(`[Raiken] Starting test script generation with OpenRouter`);
 
     // Validate API key before making request
     if (!this.validateApiKey()) {
@@ -135,13 +135,13 @@ export class OpenRouterService {
     try {
       // Create enhanced system and user prompts with DOM information
       const { systemPrompt, userPrompt } = this.createEnhancedPrompts(prompt, domTree);
-      console.log('[Arten] Enhanced prompts created - System:', systemPrompt.length, 'User:', userPrompt.length);
+      console.log('[Raiken] Enhanced prompts created - System:', systemPrompt.length, 'User:', userPrompt.length);
       
       // Prepare request payload with optimized settings
       const requestPayload = this.buildRequestPayload(userPrompt, systemPrompt);
 
       // Make the API request
-      console.log(`[Arten] Sending request to OpenRouter API...`);
+      console.log(`[Raiken] Sending request to OpenRouter API...`);
       const headers = this.getHeaders();
 
       const response = await fetch(this.apiUrl, {
@@ -167,10 +167,10 @@ export class OpenRouterService {
         throw new Error('No test script generated in the response');
       }
       
-      console.log('[Arten] Test script generated successfully');
+      console.log('[Raiken] Test script generated successfully');
       return generatedScript;
     } catch (error) {
-      console.error('[Arten] Error generating test script:', error);
+      console.error('[Raiken] Error generating test script:', error);
       throw new Error(`Failed to generate test script: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
@@ -203,8 +203,8 @@ export class OpenRouterService {
    * Get the appropriate headers for the OpenRouter API request
    */
   private getHeaders(): Record<string, string> {
-    const referer = process.env.NEXT_PUBLIC_OPENROUTER_REFERRER || process.env.OPENROUTER_REFERRER || 'https://arten.app';
-    const title = process.env.NEXT_PUBLIC_OPENROUTER_TITLE || process.env.OPENROUTER_TITLE || 'Arten';
+    const referer = process.env.NEXT_PUBLIC_OPENROUTER_REFERRER || process.env.OPENROUTER_REFERRER || 'https://raiken.app';
+    const title = process.env.NEXT_PUBLIC_OPENROUTER_TITLE || process.env.OPENROUTER_TITLE || 'Raiken';
     return {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${this.config.apiKey}`,

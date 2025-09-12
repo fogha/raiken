@@ -36,6 +36,10 @@ export type SystemAction =
   | 'TEST_ERROR'
   | 'TEST_PASSED'
   | 'TEST_FAILED'
+  // CLI Bridge actions
+  | 'DETECTING_CLI'
+  | 'CLI_CONNECTED'
+  | 'CLI_DISCONNECTED'
   | 'IDLE';
 
 interface SystemStatus {
@@ -98,6 +102,7 @@ interface BrowserState {
   setDeviceScaleFactor: (scale: number) => void;
   setMobile: (isMobile: boolean) => void;
   setStatus: (action: SystemAction, message: string, type?: StatusType) => void;
+  clearStatus: () => void;
   
   // Editor actions
   addEditorTab: (tab: TestTab) => void;
@@ -119,8 +124,8 @@ const initialState = {
   deviceScaleFactor: 1,
   isMobile: false,
   status: {
-    action: 'BROWSER_CLOSED' as SystemAction,
-    message: 'Browser is closed',
+    action: 'IDLE' as SystemAction,
+    message: '',
     type: 'idle' as StatusType,
     timestamp: Date.now()
   }
@@ -142,7 +147,7 @@ export const useBrowserStore = createSlice<BrowserState>('browser', (set, get) =
   // Status
   status: {
     action: 'IDLE' as SystemAction,
-    message: 'Ready',
+    message: '',
     type: 'idle' as StatusType
   },
   
@@ -161,6 +166,9 @@ export const useBrowserStore = createSlice<BrowserState>('browser', (set, get) =
   setMobile: (isMobile) => set({ isMobile }),
   setStatus: (action, message, type = 'info') => set({ 
     status: { action, message, type } 
+  }),
+  clearStatus: () => set({ 
+    status: { action: 'IDLE' as SystemAction, message: '', type: 'idle' as StatusType } 
   }),
 
   // Editor actions

@@ -104,7 +104,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       const domTree = projectState.domTree;
       const currentUrl = projectState.url;
 
-      console.log('[Arten] Sending request to /api/generate-test endpoint with DOM context');
+      console.log('[Raiken] Sending request to /api/generate-test endpoint with DOM context');
       const response = await fetch('/api/generate-test', {
         method: 'POST',
         headers: {
@@ -130,7 +130,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       await state.saveTest();
 
     } catch (error) {
-      console.error('[Arten] Test generation failed:', error);
+      console.error('[Raiken] Test generation failed:', error);
       state.setGenerationError(error instanceof Error ? error.message : String(error));
     } finally {
       state.setIsGenerating(false);
@@ -215,9 +215,9 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
         }}));
       }
 
-      console.log(`[Arten] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
-      console.log(`[Arten] Used test suite: ${suiteId}`);
-      console.log(`[Arten] AI Analysis: ${needsAIAnalysis ? 'Generated for failed test' : 'Not needed for passed test'}`);
+      console.log(`[Raiken] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
+      console.log(`[Raiken] Used test suite: ${suiteId}`);
+      console.log(`[Raiken] AI Analysis: ${needsAIAnalysis ? 'Generated for failed test' : 'Not needed for passed test'}`);
     } catch (error) {
       console.error('Test execution failed:', error);
     } finally {
@@ -238,20 +238,20 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       
       // Try to save via local CLI first, then fallback to server
       if (localBridge.isConnected()) {
-        console.log('[Arten] 💾 Saving test via local CLI...');
+        console.log('[Raiken] 💾 Saving test via local CLI...');
         const result = await localBridge.saveTestToLocal(testContent, filename);
         
         if (result.success) {
-          console.log(`[Arten] ✅ Test saved locally: ${result.path}`);
+          console.log(`[Raiken] ✅ Test saved locally: ${result.path}`);
         } else {
-          console.warn('[Arten] ⚠️ Local CLI save failed, falling back to server:', result.error);
+          console.warn('[Raiken] ⚠️ Local CLI save failed, falling back to server:', result.error);
           // Continue to fallback below
         }
       }
       
       if (!localBridge.isConnected()) {
         // Fallback: Save via hosted server (existing behavior)
-        console.log('[Arten] 💾 Saving test via hosted server...');
+        console.log('[Raiken] 💾 Saving test via hosted server...');
         const saveResponse = await fetch('/api/save-test', {
           method: 'POST',
           headers: {
@@ -265,10 +265,10 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
 
         if (!saveResponse.ok) {
           const saveError = await saveResponse.json();
-          console.warn('[Arten] Failed to save test script:', saveError.error);
+          console.warn('[Raiken] Failed to save test script:', saveError.error);
         } else {
           const saveResult = await saveResponse.json();
-          console.log('[Arten] Test script saved to:', saveResult.filePath);
+          console.log('[Raiken] Test script saved to:', saveResult.filePath);
         }
       }
       
@@ -297,12 +297,12 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       setTimeout(() => {
         const testsTabTrigger = document.querySelector('[data-state="inactive"][value="tests"]') as HTMLButtonElement;
         if (testsTabTrigger) {
-          console.log('[Arten] Switching to Tests tab');
+          console.log('[Raiken] Switching to Tests tab');
           testsTabTrigger.click();
         }
       }, 100);
     } catch (scriptError) {
-      console.error('[Arten] Error creating runnable script:', scriptError);
+      console.error('[Raiken] Error creating runnable script:', scriptError);
     }
   },
 
@@ -311,7 +311,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     try {
       // Try to delete via local CLI first, then fallback to server
       if (localBridge.isConnected()) {
-        console.log('[Arten] 🗑️ Deleting test via local CLI...');
+        console.log('[Raiken] 🗑️ Deleting test via local CLI...');
         const connection = localBridge.getConnectionInfo();
         if (connection) {
           const response = await fetch(`${connection.url}/api/delete-test`, {
@@ -324,24 +324,20 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
           });
           
           if (response.ok) {
-            console.log(`[Arten] ✅ Test deleted locally: ${testPath}`);
+            console.log(`[Raiken] ✅ Test deleted locally: ${testPath}`);
             state.loadTestFiles(); // Refresh list
             return;
           } else {
-            console.warn('[Arten] ⚠️ Local CLI delete failed, falling back to server');
+            console.warn('[Raiken] ⚠️ Local CLI delete failed, falling back to server');
             // Continue to fallback below
           }
         }
       }
       
       // Fallback: Delete via hosted server (unified endpoint)
-      console.log('[Arten] 🗑️ Deleting test via hosted server...');
-      const response = await fetch('/api/test-files', {
+      console.log('[Raiken] 🗑️ Deleting test via hosted server...');
+      const response = await fetch(`/api/v1/tests?path=${encodeURIComponent(testPath)}`, {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ testPath }),
       });
 
       if (!response.ok) {
@@ -350,7 +346,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       }
 
       const result = await response.json();
-      console.log(`[Arten] Test file deleted: ${testPath}`);
+      console.log(`[Raiken] Test file deleted: ${testPath}`);
       state.setTestFiles(state.testFiles.filter(file => file.path !== testPath));
     } catch (error) {
       console.error('Failed to delete test file:', error);
@@ -364,22 +360,22 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     try {
       // Try to load via local CLI first, then fallback to server
       if (localBridge.isConnected()) {
-        console.log('[Arten] 📁 Loading tests via local CLI...');
+        console.log('[Raiken] 📁 Loading tests via local CLI...');
         const result = await localBridge.getLocalTestFiles();
         
         if (result.success && result.files && Array.isArray(result.files)) {
-          console.log(`[Arten] ✅ Loaded ${result.files.length} tests from local project`);
+          console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from local project`);
           state.setTestFiles(result.files);
           return;
         } else {
-          console.warn('[Arten] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
+          console.warn('[Raiken] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
           // Continue to fallback below
         }
       }
       
       // Fallback: Load via hosted server (existing behavior)
-      console.log('[Arten] 📁 Loading tests via hosted server...');
-      const response = await fetch('/api/test-files');
+      console.log('[Raiken] 📁 Loading tests via hosted server...');
+      const response = await fetch('/api/v1/tests?action=list');
       
       if (!response.ok) {
         throw new Error('Failed to load test files');
@@ -390,14 +386,14 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       
       // Ensure files is an array
       if (!Array.isArray(files)) {
-        console.error('[Arten] ⚠️ API returned non-array for files:', files);
+        console.error('[Raiken] ⚠️ API returned non-array for files:', files);
         state.setTestFiles([]);
         return;
       }
       
       state.setTestFiles(files);
       
-      console.log(`[Arten] Loaded ${files.length} test files from folder`);
+      console.log(`[Raiken] Loaded ${files.length} test files from folder`);
     } catch (error) {
       console.error('Failed to load test files:', error);
     } finally {

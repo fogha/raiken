@@ -61,7 +61,7 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
    * Sets up editor focus, options and keyboard shortcuts
    */
   const handleEditorDidMount = (editor: any, monaco: any) => {
-    console.log('[Arten] Monaco editor mounted');
+    console.log('[Raiken] Monaco editor mounted');
     setEditorMounted(true);
     editor.focus();
     
@@ -103,14 +103,14 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
       } else {
         // For JS/TS, use Monaco's built-in formatter
         // This happens automatically with the editor's commands
-        console.log(`[Arten] Using built-in formatter for ${language}`);
+        console.log(`[Raiken] Using built-in formatter for ${language}`);
         // Future enhancement: Could implement Prettier integration here
       }
       // Show success feedback that auto-dismisses after 2 seconds
       setFormatSuccess(true);
       setTimeout(() => setFormatSuccess(null), 2000);
     } catch (error) {
-      console.error('[Arten] Formatting failed:', error);
+      console.error('[Raiken] Formatting failed:', error);
       setFormatSuccess(false);
       setTimeout(() => setFormatSuccess(null), 2000);
     } finally {
@@ -122,7 +122,7 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
   useEffect(() => {
     // This ensures Monaco editor loads correctly
     import('monaco-editor').then(monaco => {
-      console.log('[Arten] Monaco editor loaded');
+      console.log('[Raiken] Monaco editor loaded');
       
       // Register empty providers for CodeLens and CodeActions
       monaco.languages.registerCodeLensProvider('typescript', {
@@ -142,7 +142,7 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
         provideCodeActions: () => ({ actions: [], dispose: () => {} })
       });
     }).catch(err => {
-      console.error('[Arten] Failed to load Monaco editor:', err);
+      console.error('[Raiken] Failed to load Monaco editor:', err);
     });
   }, []);
 

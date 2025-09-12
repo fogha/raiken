@@ -105,8 +105,8 @@ export function TabbedTestEditor() {
     const uniqueFileName = `${safeFileName}_${tab.id}`;
     const testPath = `generated-tests/${uniqueFileName}.spec.ts`;
     
-    console.log(`[Arten] Running specific test: ${tab.name} (ID: ${tab.id})`);
-    console.log(`[Arten] Test file path: ${testPath}`);
+    console.log(`[Raiken] Running specific test: ${tab.name} (ID: ${tab.id})`);
+    console.log(`[Raiken] Test file path: ${testPath}`);
     await runTest(testPath);
   };
 

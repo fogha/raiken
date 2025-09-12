@@ -33,7 +33,7 @@ export class PlaywrightService {
     if (this.browsers.has(scriptId)) return;
     
     try {      
-      console.log(`[Arten] Launching ${browserType} browser with headless=${headless} for script ${scriptId}`);
+      console.log(`[Raiken] Launching ${browserType} browser with headless=${headless} for script ${scriptId}`);
       const browser = await (browserType === 'firefox' 
         ? firefox.launch({ headless }) 
         : browserType === 'webkit' 
@@ -79,7 +79,7 @@ export class PlaywrightService {
         throw new Error(`Failed to initialize page for script ${targetScriptId}`);
       }
       
-      console.log(`[Arten] Navigating to ${url} with browser for script ${targetScriptId}`);
+      console.log(`[Raiken] Navigating to ${url} with browser for script ${targetScriptId}`);
       await page.goto(url, { waitUntil: 'networkidle' });
       
       // Update legacy reference if this is the active script
@@ -87,7 +87,7 @@ export class PlaywrightService {
         this.page = page;
       }
     } catch (error) {
-      console.error(`[Arten] Failed to navigate to ${url} for script ${targetScriptId}:`, error);
+      console.error(`[Raiken] Failed to navigate to ${url} for script ${targetScriptId}:`, error);
       throw error;
     }
   }
@@ -444,7 +444,7 @@ export class PlaywrightService {
     const browserType = config.browserType || 'chromium';
     const headless = config.headless !== undefined ? config.headless : true;
     
-    console.log(`[Arten] Running test script with ID: ${testId}, headless: ${headless}`);
+    console.log(`[Raiken] Running test script with ID: ${testId}, headless: ${headless}`);
     
     // Close existing browser for this script ID if it exists to ensure clean state
     if (this.browsers.has(testId)) {
@@ -644,7 +644,7 @@ export class PlaywrightService {
    * This performs a simplified execution of key actions from the script
    */
   private async executePlaywrightTest(script: string, scriptId?: string): Promise<any> {
-    console.log(`[Arten] Executing Playwright TypeScript test for script ${scriptId || 'unknown'}...`);
+    console.log(`[Raiken] Executing Playwright TypeScript test for script ${scriptId || 'unknown'}...`);
     
     try {
       // Get the page for this script ID (or use legacy page as fallback)
@@ -672,7 +672,7 @@ export class PlaywrightService {
       const url = urlMatch ? urlMatch[1] : null;
       
       if (url) {
-        console.log(`[Arten] Found URL in test: ${url}`);
+        console.log(`[Raiken] Found URL in test: ${url}`);
         await this.navigate(url, targetScriptId);
         results.actions.push({ type: 'navigate', url, success: true });
       }
@@ -691,11 +691,11 @@ export class PlaywrightService {
       // Execute click operations
       for (const selector of clicks) {
         try {
-          console.log(`[Arten] Clicking element: ${selector}`);
+          console.log(`[Raiken] Clicking element: ${selector}`);
           await page.click(selector);
           results.actions.push({ type: 'click', selector, success: true });
         } catch (error) {
-          console.error(`[Arten] Failed to click ${selector}:`, error);
+          console.error(`[Raiken] Failed to click ${selector}:`, error);
           results.actions.push({ 
             type: 'click', 
             selector, 
@@ -720,7 +720,7 @@ export class PlaywrightService {
         }
       }
       
-      console.log(`[Arten] Found ${fills.length} fill operations in the test script`);
+      console.log(`[Raiken] Found ${fills.length} fill operations in the test script`);
       
       for (const fill of fills) {
         const selector = fill.selector?.replace(/['"]/g, '');
@@ -728,11 +728,11 @@ export class PlaywrightService {
         
         if (selector && value && this.page) {
         try {
-          console.log(`[Arten] Filling element: ${selector} with value: ${value}`);
+          console.log(`[Raiken] Filling element: ${selector} with value: ${value}`);
           await this.page?.fill(selector, value);
           results.actions.push({ type: 'fill', selector, value, success: true });
         } catch (error) {
-          console.error(`[Arten] Failed to fill ${selector}:`, error);
+          console.error(`[Raiken] Failed to fill ${selector}:`, error);
           results.actions.push({ 
             type: 'fill', 
             selector, 
@@ -750,10 +750,10 @@ export class PlaywrightService {
       results.endTime = new Date().toISOString();
       results.duration = endTime - startTime;
       
-      console.log('[Arten] Playwright test execution completed');
+      console.log('[Raiken] Playwright test execution completed');
       return results;
     } catch (error) {
-      console.error('[Arten] Error executing Playwright test:', error);
+      console.error('[Raiken] Error executing Playwright test:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
@@ -771,7 +771,7 @@ export class PlaywrightService {
   async close(scriptId?: string): Promise<void> {
     if (scriptId) {
       // Close a specific browser instance
-      console.log(`[Arten] Closing browser for script ${scriptId}`);
+      console.log(`[Raiken] Closing browser for script ${scriptId}`);
       const browser = this.browsers.get(scriptId);
       if (browser) {
         await browser.close();
@@ -789,7 +789,7 @@ export class PlaywrightService {
       }
     } else {
       // Close all browser instances
-      console.log('[Arten] Closing all browser instances');
+      console.log('[Raiken] Closing all browser instances');
       // Use Array.from to avoid downlevelIteration issues
       const browserEntries = Array.from(this.browsers.entries());
       for (const [scriptId, browser] of browserEntries) {

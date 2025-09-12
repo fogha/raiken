@@ -1,4 +1,4 @@
-# Arten Project Structure
+# Raiken Project Structure
 
 ## Core Modules
 
@@ -15,11 +15,18 @@ src/core/
 │   └── index.ts              # Exports
 │
 ├── testing/                  # Test generation and execution
-│   ├── test-executor.ts      # Test running functionality
-│   ├── test-generator.ts     # Test script generation
+│   ├── services/             # Test-related services
+│   │   ├── openrouter.service.ts # AI integration for test generation
+│   │   ├── testExecutor.ts   # Test execution functionality
+│   │   ├── testFileManager.ts # Test file operations
+│   │   ├── testSuite.ts      # Test suite management
+│   │   └── reports.service.ts # Test reporting
+│   ├── test-script-utils.ts  # Test script utilities
 │   ├── ui/                   # Testing UI components
-│   │   └── TestScriptEditor.tsx # Test script editing component
-│   ├── openai.service.ts     # OpenAI integration for test generation
+│   │   ├── TestScriptEditor.tsx # Test script editing component
+│   │   ├── TabbedTestEditor.tsx # Multi-tab test editor
+│   │   ├── TestBuilder.tsx   # Test generation interface
+│   │   └── TestReports.tsx   # Test results display
 │   └── index.ts              # Exports
 │
 └── index.ts                  # Main exports
@@ -45,10 +52,9 @@ src/store/
 │   ├── Test results        # Execution results and history
 │   └── Test settings       # Configuration and preferences
 │
-└── flowStore.ts           # Flow builder state
-    ├── Flow definition    # Action nodes and connections
-    ├── Editing state      # Selected nodes and edit mode
-    └── Execution state    # Flow running status
+├── configurationStore.ts  # Configuration management
+├── notificationStore.ts  # Notification system
+└── types.ts              # Shared store types
 ```
 
 ## UI Components
@@ -67,12 +73,36 @@ src/components/
 ## API Routes
 
 ```
-src/app/api/
+src/app/api/v1/
 ├── browser/                 # Browser control API
-│   └── route.ts             # Browser API endpoints for DOM extraction, navigation & testing
+│   └── route.ts             # Unified browser API endpoints
 │
-└── test/                    # Test execution API
-    └── route.ts             # Test API endpoints
+└── tests/                   # Test management API
+    └── route.ts             # Unified test API endpoints
+```
+
+## Service Layer
+
+```
+src/services/
+├── api.service.ts           # HTTP client with error handling
+├── browser.service.ts       # High-level browser operations
+├── test.service.ts          # High-level test operations
+├── ai.service.ts            # AI service abstraction
+├── storage.service.ts       # Local storage abstraction
+└── index.ts                 # Service exports
+```
+
+## Utilities
+
+```
+src/utils/
+├── error-handling.ts        # Standardized error handling
+├── validation.ts            # Input validation utilities
+├── formatters.ts            # Display formatting helpers
+├── dom-helpers.ts           # DOM manipulation utilities
+├── test-helpers.ts          # Test-related utilities
+└── index.ts                 # Utility exports
 ```
 
 ## Types
@@ -92,11 +122,6 @@ src/types/
 │   ├── TestResult        # Test execution results
 │   ├── TestTab           # Test editor tab data
 │   └── Component Props   # UI component prop types
-│
-├── flow.ts                # Flow builder types
-│   ├── FlowNode          # Action node definitions
-│   ├── FlowEdge          # Node connections
-│   └── FlowConfig        # Flow execution settings
 │
 ├── status.ts             # System status types
 │   ├── StatusState       # Status tracking

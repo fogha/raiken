@@ -1,5 +1,5 @@
 interface Window {
-  __arten: {
+  __raiken: {
     startRecording: (callback: (event: RecordedEvent) => void) => void;
     stopRecording: () => void;
     sendMessage: (type: string, payload: any) => void;

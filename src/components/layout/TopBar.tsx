@@ -17,7 +17,7 @@ export function TopBar({ isLoading }: TopBarProps) {
       {/* Left side: App logo */}
       <div className="flex items-center">
         <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium tracking-tight">Arten</span>
+          <span className="text-sm font-medium tracking-tight">Raiken</span>
         </div>
       </div>
       

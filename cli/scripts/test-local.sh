@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Test script for Arten CLI development
+# Test script for Raiken CLI development
 
 set -e
 
-echo "🎭 Testing Arten CLI locally..."
+echo "🎭 Testing Raiken CLI locally..."
 
 # Build the CLI
 echo "📦 Building CLI..."
@@ -13,16 +13,16 @@ npm run build
 
 # Create a temporary test project
 echo "🏗️  Creating test project..."
-TEST_DIR="/tmp/arten-cli-test-$(date +%s)"
+TEST_DIR="/tmp/raiken-cli-test-$(date +%s)"
 mkdir -p "$TEST_DIR"
 cd "$TEST_DIR"
 
 # Initialize a simple Node.js project
 cat > package.json << 'EOF'
 {
-  "name": "arten-test-project",
+  "name": "raiken-test-project",
   "version": "1.0.0",
-  "description": "Test project for Arten CLI",
+  "description": "Test project for Raiken CLI",
   "scripts": {
     "dev": "echo 'Development server would start here'"
   },
@@ -42,15 +42,15 @@ cd "$CLI_DIR"
 # Test CLI commands
 echo "🧪 Testing CLI commands..."
 
-echo "  Testing 'arten info'..."
-node bin/arten.js info --help
+echo "  Testing 'raiken info'..."
+node bin/raiken.js info --help
 
-echo "  Testing 'arten init' (dry run)..."
+echo "  Testing 'raiken init' (dry run)..."
 cd "$TEST_DIR"
-"$CLI_DIR/bin/arten.js" info
+"$CLI_DIR/bin/raiken.js" info
 
-echo "  Testing 'arten start' (help only)..."
-"$CLI_DIR/bin/arten.js" start --help
+echo "  Testing 'raiken start' (help only)..."
+"$CLI_DIR/bin/raiken.js" start --help
 
 echo "✅ Basic CLI tests passed!"
 
@@ -63,6 +63,6 @@ echo ""
 echo "To test manually:"
 echo "  1. cd cli && npm link"
 echo "  2. cd /path/to/your/project"
-echo "  3. arten info"
-echo "  4. arten init"
-echo "  5. arten start" 
+echo "  3. raiken info"
+echo "  4. raiken init"
+echo "  5. raiken start" 

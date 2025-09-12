@@ -43,15 +43,26 @@ next-env.d.ts
 .idea
 .vscode
 
-# Generated test scripts
-/generated-tests/
-/test-results/
-/test-results/*
+# Generated test scripts and results
+/generated-tests/*.spec.ts
+/test-results/*.json
+/test-results/temp-execution/
+/test-results/*-chromium/
+/test-results/*-firefox/
+/test-results/*-webkit/
+
+# Keep examples for generated tests
+!/generated-tests/.gitkeep
 
 # Temporary config files
 playwright.config.temp.ts
+*.temp.*
 
 # CLI build artifacts
 /cli/dist/
 /cli/node_modules/
 /cli/*.tsbuildinfo
+/cli/*.tgz
+
+# Node modules in subdirectories
+**/node_modules/

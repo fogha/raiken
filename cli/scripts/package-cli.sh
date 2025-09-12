@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Package and test the Arten CLI for distribution
+# Package and test the Raiken CLI for distribution
 
 set -e
 
-echo "📦 Packaging Arten CLI for distribution..."
+echo "📦 Packaging Raiken CLI for distribution..."
 
 # Get current directory
 CLI_DIR="$(cd "$(dirname "${0}")/.." && pwd)"
@@ -35,7 +35,7 @@ echo "✅ Build completed successfully"
 echo "📦 Creating package tarball..."
 VERSION=$(node -p "require('./package.json').version")
 ORIGINAL_TARBALL=$(npm pack)
-TARBALL="arten-cli-v${VERSION}.tgz"
+TARBALL="raiken-cli-v${VERSION}.tgz"
 mv "$ORIGINAL_TARBALL" "$TARBALL"
 echo "📋 Created package: $TARBALL"
 
@@ -45,7 +45,7 @@ echo "📋 Created package: $TARBALL"
 
 # Test installation in a temporary directory
 echo "🧪 Testing package installation..."
-TEST_DIR="/tmp/arten-cli-install-test-$(date +%s)"
+TEST_DIR="/tmp/raiken-cli-install-test-$(date +%s)"
 mkdir -p "$TEST_DIR"
 cp "$CLI_DIR/$TARBALL" "$TEST_DIR/"
 cd "$TEST_DIR"
@@ -54,12 +54,12 @@ cd "$TEST_DIR"
 tar -xzf "$TARBALL"
 
 # Move into the package directory
-PACKAGE_DIR=$(ls -d package 2>/dev/null || ls -d arten-cli-* 2>/dev/null || echo ".")
+PACKAGE_DIR=$(ls -d package 2>/dev/null || ls -d raiken-cli-* 2>/dev/null || echo ".")
 cd "$PACKAGE_DIR"
 
 # Test that all required files are present
 echo "🔍 Verifying package contents..."
-required_files=("package.json" "bin/arten.js" "dist/index.js")
+required_files=("package.json" "bin/raiken.js" "dist/index.js")
 for file in "${required_files[@]}"; do
   if [ ! -f "$file" ]; then
     echo "❌ Missing required file: $file"
@@ -68,14 +68,14 @@ for file in "${required_files[@]}"; do
 done
 
 # Test that the binary is executable
-if [ ! -x "bin/arten.js" ]; then
-  echo "❌ Binary is not executable: bin/arten.js"
+if [ ! -x "bin/raiken.js" ]; then
+  echo "❌ Binary is not executable: bin/raiken.js"
   exit 1
 fi
 
 # Test basic CLI functionality
 echo "🧪 Testing CLI functionality..."
-node bin/arten.js --help > /dev/null 2>&1
+node bin/raiken.js --help > /dev/null 2>&1
 if [ $? -eq 0 ]; then
   echo "✅ CLI help command works"
 else
@@ -84,7 +84,7 @@ else
 fi
 
 # Test version command
-node bin/arten.js --version > /dev/null 2>&1
+node bin/raiken.js --version > /dev/null 2>&1
 if [ $? -eq 0 ]; then
   echo "✅ CLI version command works"
 else
@@ -108,7 +108,7 @@ echo "   npm publish $TARBALL"
 echo ""
 echo "🧪 To test locally:"
 echo "   npm install -g ./$TARBALL"
-echo "   arten --help"
+echo "   raiken --help"
 echo ""
 echo "📋 Next steps:"
 echo "   1. Test the package on different systems"

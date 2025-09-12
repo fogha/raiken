@@ -12,7 +12,7 @@ class LocalBridgeService {
   private readonly DEFAULT_PORTS = [3460, 3456, 3459, 3457, 3458];
 
   async detectLocalCLI(): Promise<LocalBridgeConnection | null> {
-    console.log('🔍 Detecting local Arten CLI...');
+    console.log('🔍 Detecting local Raiken CLI...');
     
     for (const port of this.DEFAULT_PORTS) {
       try {
@@ -23,7 +23,7 @@ class LocalBridgeService {
         
         if (response.ok) {
           const data = await response.json();
-          console.log(`✓ Found Arten CLI at ${url}`, data);
+          console.log(`✓ Found Raiken CLI at ${url}`, data);
           
           // Get detailed project info and auth token
           const projectResponse = await fetch(`${url}/api/project-info`);
@@ -44,7 +44,7 @@ class LocalBridgeService {
       }
     }
     
-    console.log('❌ No local Arten CLI detected');
+    console.log('❌ No local Raiken CLI detected');
     return null;
   }
 
@@ -54,7 +54,7 @@ class LocalBridgeService {
       if (!detected) {
         return { 
           success: false, 
-          error: 'No local Arten CLI detected. Run "arten remote" in your project directory.' 
+          error: 'No local Raiken CLI detected. Run "raiken remote" in your project directory.' 
         };
       }
     }

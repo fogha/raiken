@@ -1,6 +1,6 @@
-# Arten - AI-Powered Test Automation Tool
+# Raiken - AI-Powered Test Automation Tool
 
-Arten is a modern web application testing tool that combines AI with Playwright for automated testing. It provides a visual interface for creating, managing, and executing tests with real-time status tracking, enhanced error handling, and comprehensive test management capabilities.
+Raiken is a modern web application testing tool that combines AI with Playwright for automated testing. It provides a visual interface for creating, managing, and executing tests with real-time status tracking, enhanced error handling, and comprehensive test management capabilities.
 
 > 📖 **For complete documentation, see [DOCUMENTATION.md](DOCUMENTATION.md)**
 
@@ -9,19 +9,19 @@ Arten is a modern web application testing tool that combines AI with Playwright 
 ### Option 1: CLI Tool (Recommended)
 ```bash
 # Install globally
-npm install -g @arten/cli
+npm install -g @raiken/cli
 
 # Navigate to your project
 cd my-nextjs-app
 
-# Start Arten (auto-detects project type)
-arten start
+# Start Raiken (auto-detects project type)
+raiken start
 ```
 
 ### Option 2: Standalone Web Application
 ```bash
-git clone https://github.com/your-username/arten.git
-cd arten
+git clone https://github.com/your-username/raiken.git
+cd raiken
 npm install
 echo "OPENROUTER_API_KEY=your_api_key_here" > .env.local
 npm run dev
@@ -63,7 +63,7 @@ npm run dev
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Arten Architecture                       │
+│                    Raiken Architecture                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Web UI (Next.js)          │  CLI Bridge Server             │
 │  ├── Test Builder          │  ├── Project Detection         │
@@ -89,10 +89,10 @@ OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 
 ### CLI Commands
 ```bash
-arten start     # Start web interface
-arten init      # Initialize project
-arten info      # Show project information
-arten remote    # Start bridge server
+raiken start     # Start web interface
+raiken init      # Initialize project
+raiken info      # Show project information
+raiken remote    # Start bridge server
 ```
 
 ## 📊 Current Status
@@ -137,10 +137,10 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 ## 🆘 Support
 
-- 📧 **Issues:** [GitHub Issues](https://github.com/your-username/arten/issues)
+- 📧 **Issues:** [GitHub Issues](https://github.com/your-username/raiken/issues)
 - 📖 **Documentation:** [DOCUMENTATION.md](DOCUMENTATION.md)
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-username/arten/discussions)
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/your-username/raiken/discussions)
 
 ---
 
-*Arten continues to evolve with regular updates and improvements. Check the [changelog](CHANGELOG.md) for the latest features and bug fixes.*
+*Raiken continues to evolve with regular updates and improvements. Check the [changelog](CHANGELOG.md) for the latest features and bug fixes.*

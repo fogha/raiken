@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import chalk from 'chalk';
 import detectPort from 'detect-port';
 import cors from 'cors';
@@ -14,17 +14,35 @@ interface RemoteServerOptions {
 export async function startRemoteServer(options: RemoteServerOptions): Promise<void> {
   const { port: requestedPort, projectPath, projectInfo } = options;
 
-  // Find an available port
-  const availablePort = await detectPort(requestedPort);
+  // Find an available port with explicit fallback logic
+  let availablePort = await detectPort(requestedPort);
+  
+  // If the requested port is not available, try sequential ports
   if (availablePort !== requestedPort) {
-    console.log(chalk.yellow(`Port ${requestedPort} is busy, using ${availablePort} instead`));
+    console.log(chalk.yellow(`Port ${requestedPort} is busy, trying fallback ports...`));
+    
+    // Try ports 3460, 3461, 3462, etc.
+    const basePort = 3460;
+    for (let i = 0; i < 10; i++) {
+      const tryPort = basePort + i;
+      const testPort = await detectPort(tryPort);
+      if (testPort === tryPort) {
+        availablePort = tryPort;
+        console.log(chalk.green(`✓ Using port ${availablePort}`));
+        break;
+      }
+    }
+    
+    if (availablePort !== requestedPort) {
+      console.log(chalk.yellow(`Using port ${availablePort} (fallback from ${requestedPort})`));
+    }
   }
 
   const app = express();
 
   // CORS configuration for hosted platform
   app.use(cors({
-    origin: ['https://arten.dev', 'http://localhost:3000', 'http://localhost:3002', 'http://localhost:3001'],
+    origin: ['https://raiken.dev', 'http://localhost:3000', 'http://localhost:3002', 'http://localhost:3001'],
     credentials: true,
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS']
   }));
@@ -38,13 +56,13 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   console.log(chalk.gray(`   Configure this token in the hosted platform`));
 
   // Request logging
-  app.use('/api', (req, res, next) => {
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
     console.log(`${chalk.cyan(req.method)} ${chalk.yellow(req.path)} - ${new Date().toISOString()}`);
     next();
   });
 
   // Auth middleware (exclude health and project-info endpoints for discovery)
-  app.use('/api', (req, res, next) => {
+  app.use('/api', (req: Request, res: Response, next: NextFunction) => {
     // Skip auth for discovery endpoints
     if (req.path === '/health' || req.path === '/project-info') {
       return next();
@@ -62,7 +80,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   const fsAdapter = new LocalFileSystemAdapter(projectPath, projectInfo);
 
   // Health check endpoint (no auth required)
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (req: Request, res: Response) => {
     res.json({
       status: 'ok',
       project: projectInfo.name,
@@ -73,7 +91,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 
   // Project info with auth token
-  app.get('/api/project-info', (req, res) => {
+  app.get('/api/project-info', (req: Request, res: Response) => {
     res.json({
       ...projectInfo,
       authToken: authToken,
@@ -86,7 +104,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 
   // File operations
-  app.get('/api/test-files', async (req, res) => {
+  app.get('/api/test-files', async (req: Request, res: Response) => {
     try {
       const testFiles = await fsAdapter.getTestFiles();
       res.json({ files: testFiles }); // Match the expected format
@@ -96,7 +114,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     }
   });
 
-  app.post('/api/save-test', async (req, res) => {
+  app.post('/api/save-test', async (req: Request, res: Response) => {
     try {
       // Handle both formats: {content, filename} and {name, content}
       const { content, filename, name, tabId } = req.body;
@@ -113,7 +131,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     }
   });
 
-  app.delete('/api/delete-test', async (req, res) => {
+  app.delete('/api/delete-test', async (req: Request, res: Response) => {
     try {
       const { testPath } = req.body;
       await fsAdapter.deleteTestFile(testPath);
@@ -124,13 +142,13 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 
   // Catch-all for unsupported endpoints
-  app.use('*', (req, res) => {
+  app.use('*', (req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found. This is a bridge server for local file operations.' });
   });
 
   // Start the server
   const server = app.listen(availablePort, () => {
-    console.log(chalk.green(`✓ Arten bridge server running at http://localhost:${availablePort}`));
+    console.log(chalk.green(`✓ Raiken bridge server running at http://localhost:${availablePort}`));
     console.log(chalk.blue(`  Project: ${projectInfo.name} (${projectInfo.type})`));
     console.log(chalk.blue(`  Test directory: ${projectInfo.testDir}`));
     console.log(chalk.yellow(`  🌐 Hosted platform configuration:`));

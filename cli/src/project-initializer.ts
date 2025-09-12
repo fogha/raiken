@@ -11,8 +11,8 @@ export async function initializeProject(projectPath: string, force: boolean = fa
   // 1. Create test directory
   await createTestDirectory(projectPath, projectInfo);
   
-  // 2. Create Arten configuration
-  await createArtenConfig(projectPath, projectInfo, force);
+  // 2. Create Raiken configuration
+  await createRaikenConfig(projectPath, projectInfo, force);
   
   // 3. Set up Playwright configuration
   await setupPlaywrightConfig(projectPath, projectInfo, force);
@@ -38,8 +38,8 @@ async function createTestDirectory(projectPath: string, projectInfo: ProjectInfo
   }
 }
 
-async function createArtenConfig(projectPath: string, projectInfo: ProjectInfo, force: boolean): Promise<void> {
-  const configPath = path.join(projectPath, 'arten.config.json');
+async function createRaikenConfig(projectPath: string, projectInfo: ProjectInfo, force: boolean): Promise<void> {
+  const configPath = path.join(projectPath, 'raiken.config.json');
   
   const config = {
     projectType: projectInfo.type,
@@ -67,7 +67,7 @@ async function createArtenConfig(projectPath: string, projectInfo: ProjectInfo, 
   try {
     await fs.access(configPath);
     if (!force) {
-      console.log(chalk.yellow('⚠ arten.config.json already exists (use --force to overwrite)'));
+      console.log(chalk.yellow('⚠ raiken.config.json already exists (use --force to overwrite)'));
       return;
     }
   } catch {
@@ -75,7 +75,7 @@ async function createArtenConfig(projectPath: string, projectInfo: ProjectInfo, 
   }
   
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
-  console.log(chalk.green('✓ Created arten.config.json'));
+  console.log(chalk.green('✓ Created raiken.config.json'));
 }
 
 async function setupPlaywrightConfig(projectPath: string, projectInfo: ProjectInfo, force: boolean): Promise<void> {
@@ -143,7 +143,7 @@ async function updatePackageScripts(projectPath: string, projectInfo: ProjectInf
       'test:e2e': 'playwright test',
       'test:e2e:ui': 'playwright test --ui',
       'test:e2e:debug': 'playwright test --debug',
-      'arten': 'arten start'
+      'raiken': 'raiken start'
     };
     
     packageJson.scripts = { ...packageJson.scripts, ...newScripts };

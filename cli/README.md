@@ -1,4 +1,4 @@
-# Arten CLI
+# Raiken CLI
 
 AI-powered Playwright test generator that integrates directly with your local development environment.
 
@@ -6,10 +6,10 @@ AI-powered Playwright test generator that integrates directly with your local de
 
 ```bash
 # Install globally
-npm install -g @arten/cli
+npm install -g @raiken/cli
 
 # Or use with npx (no installation required)
-npx @arten/cli@latest start
+npx @raiken/cli@latest start
 ```
 
 ## Quick Start
@@ -19,37 +19,37 @@ npx @arten/cli@latest start
 cd my-nextjs-app
 ```
 
-2. Initialize Arten (optional - sets up Playwright config and test directory):
+2. Initialize Raiken (optional - sets up Playwright config and test directory):
 ```bash
-arten init
+raiken init
 ```
 
-3. Start the Arten web interface:
+3. Start the Raiken web interface:
 ```bash
-arten start
+raiken start
 ```
 
 This will:
 - Auto-detect your project type (Next.js, React, Vue, etc.)
-- Start a local server at `http://localhost:3456`
-- Open your browser to the Arten interface
+- Start a local server at `http://localhost:3460`
+- Open your browser to the Raiken interface
 - Write generated tests directly to your project's test directory
 
 ## Commands
 
-### `arten start`
-Start the Arten web interface for the current project.
+### `raiken start`
+Start the Raiken web interface for the current project.
 
 Options:
-- `-p, --port <port>` - Port to run the server on (default: 3456)
+- `-p, --port <port>` - Port to run the server on (default: 3460)
 - `--no-open` - Don't open browser automatically
 
 ```bash
-arten start --port 4000 --no-open
+raiken start --port 4000 --no-open
 ```
 
-### `arten init`
-Initialize Arten in the current project. This will:
+### `raiken init`
+Initialize Raiken in the current project. This will:
 - Create a test directory (e.g., `e2e/`, `tests/`)
 - Set up Playwright configuration
 - Add npm scripts for testing
@@ -59,19 +59,19 @@ Options:
 - `--force` - Overwrite existing configuration
 
 ```bash
-arten init --force
+raiken init --force
 ```
 
-### `arten info`
+### `raiken info`
 Display information about the current project:
 
 ```bash
-arten info
+raiken info
 ```
 
 Output example:
 ```
-🎭 Arten Project Information
+🎭 Raiken Project Information
 
 Project Name: my-nextjs-app
 Project Type: nextjs
@@ -83,7 +83,7 @@ Test Command: npm run test:e2e
 
 ## Project Detection
 
-Arten automatically detects your project type and configures itself accordingly:
+Raiken automatically detects your project type and configures itself accordingly:
 
 | Project Type | Detection | Default Test Dir | Default Port |
 |--------------|-----------|------------------|--------------|
@@ -98,7 +98,7 @@ Arten automatically detects your project type and configures itself accordingly:
 
 ## Configuration
 
-Arten creates a `arten.config.json` file in your project root:
+Raiken creates a `raiken.config.json` file in your project root:
 
 ```json
 {
@@ -139,7 +139,7 @@ OPENROUTER_MODEL=anthropic/claude-3.5-sonnet
 
 ## Generated Files
 
-Arten creates files directly in your project:
+Raiken creates files directly in your project:
 
 ```
 my-project/
@@ -147,18 +147,18 @@ my-project/
 │   ├── example.spec.ts      # Example test (created by init)
 │   └── homepage.spec.ts     # Generated tests
 ├── playwright.config.ts     # Playwright configuration
-├── arten.config.json        # Arten configuration
+├── raiken.config.json        # Raiken configuration
 └── package.json            # Updated with test scripts
 ```
 
 ## Package.json Scripts
 
-Arten adds these scripts to your `package.json`:
+Raiken adds these scripts to your `package.json`:
 
 ```json
 {
   "scripts": {
-    "arten": "arten start",
+    "raiken": "raiken start",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug"
@@ -171,8 +171,8 @@ Arten adds these scripts to your `package.json`:
 ### Next.js Project
 ```bash
 cd my-nextjs-app
-arten init  # Creates e2e/ directory and config
-arten start # Open web interface
+raiken init  # Creates e2e/ directory and config
+raiken start # Open web interface
 # Generate tests for your Next.js pages
 npm run test:e2e  # Run generated tests
 ```
@@ -180,16 +180,16 @@ npm run test:e2e  # Run generated tests
 ### React App
 ```bash
 cd my-react-app
-arten init  # Creates tests/ directory
-# Arten auto-detects React and configures accordingly
-arten start
+raiken init  # Creates tests/ directory
+# Raiken auto-detects React and configures accordingly
+raiken start
 ```
 
 ### Existing Playwright Setup
 ```bash
 cd my-app-with-playwright
-arten start  # Uses existing configuration
-# Arten integrates with your existing setup
+raiken start  # Uses existing configuration
+# Raiken integrates with your existing setup
 ```
 
 ## Features
@@ -206,7 +206,7 @@ arten start  # Uses existing configuration
 
 ### Port Already in Use
 ```bash
-arten start --port 4000
+raiken start --port 4000
 ```
 
 ### Playwright Not Installed
@@ -216,7 +216,7 @@ npx playwright install
 ```
 
 ### Permission Errors
-Make sure Arten has write permissions to your project directory:
+Make sure Raiken has write permissions to your project directory:
 ```bash
 chmod -R 755 my-project/
 ```
@@ -228,11 +228,11 @@ chmod -R 755 my-project/
 
 ## Development
 
-To contribute to Arten CLI:
+To contribute to Raiken CLI:
 
 ```bash
-git clone https://github.com/yourusername/arten.git
-cd arten/cli
+git clone https://github.com/yourusername/raiken.git
+cd raiken/cli
 npm install
 npm run build
 npm link  # Use local version globally

@@ -2,45 +2,39 @@
 
 import React, { useEffect } from 'react';
 import { useLocalBridge } from '@/hooks/useLocalBridge';
-import { useNotificationStore } from '@/store/notificationStore';
+import { useBrowserStore } from '@/store/browserStore';
 
 export function LocalBridgeStatus() {
   const { connection, isConnected, isDetecting } = useLocalBridge();
-  const { addNotification } = useNotificationStore();
+  const { setStatus, clearStatus } = useBrowserStore();
 
-  // Show notification when detecting CLI
+  // Update status bar when detecting CLI
   useEffect(() => {
     if (isDetecting) {
-      addNotification({
-        type: 'info',
-        title: 'Detecting local CLI',
-        message: 'Searching for Arten CLI bridge server...',
-        duration: 5000,
-      });
+      setStatus('DETECTING_CLI', 'Detecting local CLI...', 'loading');
     }
-  }, [isDetecting, addNotification]);
+  }, [isDetecting, setStatus]);
 
-  // Show notification when connection state changes
+  // Update status bar when connection state changes
   useEffect(() => {
     if (isConnected && connection) {
-      addNotification({
-        type: 'success',
-        title: 'Connected to local project',
-        message: `${connection.projectInfo.name} • ${connection.projectInfo.type} • ${connection.projectInfo.testDir} • ${connection.url.replace('http://localhost:', 'port ')}`,
-        duration: 10000,
-      });
+      const port = connection.url.replace('http://localhost:', '');
+      setStatus('CLI_CONNECTED', `Local CLI connected • ${connection.projectInfo.name} • Port ${port}`, 'success');
+      // Clear connected status after showing it briefly
+      setTimeout(() => {
+        clearStatus();
+      }, 4000);
     } else if (!isDetecting) {
-      // Only show disconnected notification if we're not currently detecting
-      addNotification({
-        type: 'warning',
-        title: 'Local CLI not detected',
-        message: 'To save tests directly to your project, run the bridge server.',
-        duration: 10000,
-      });
+      // Only show disconnected status if we're not currently detecting
+      setStatus('CLI_DISCONNECTED', 'Local CLI disconnected • Tests saved to browser storage', 'info');
+      // Clear disconnected status after showing it briefly
+      setTimeout(() => {
+        clearStatus();
+      }, 4000);
     }
-  }, [isConnected, connection, isDetecting, addNotification]);
+  }, [isConnected, connection, isDetecting, setStatus, clearStatus]);
 
-  // This component doesn't render anything visible - it just manages notifications
+  // This component doesn't render anything visible - it just updates the status bar
   return null;
 }
 

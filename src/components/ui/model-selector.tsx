@@ -26,7 +26,7 @@ export function ModelSelector() {
   // Load saved model from localStorage on initial render
   React.useEffect(() => {
     try {
-      const savedConfig = localStorage.getItem('artenConfig')
+      const savedConfig = localStorage.getItem('raikenConfig')
       if (savedConfig) {
         const config = JSON.parse(savedConfig)
         if (config.api?.model) {
@@ -41,7 +41,7 @@ export function ModelSelector() {
   // Save selected model to localStorage
   const saveModelSelection = (modelId: string) => {
     try {
-      const savedConfig = localStorage.getItem('artenConfig') || '{}'
+      const savedConfig = localStorage.getItem('raikenConfig') || '{}'
       const config = JSON.parse(savedConfig)
       
       // Update the model in the config
@@ -49,7 +49,7 @@ export function ModelSelector() {
       config.api.model = modelId
       
       // Save back to localStorage
-      localStorage.setItem('artenConfig', JSON.stringify(config))
+      localStorage.setItem('raikenConfig', JSON.stringify(config))
     } catch (error) {
       console.error('Error saving model to localStorage:', error)
     }

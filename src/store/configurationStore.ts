@@ -75,7 +75,7 @@ export const useConfigurationStore = create<ConfigurationState>()(
       reset: () => set({ config: defaultConfig })
     }),
     {
-      name: 'arten-configuration',
+      name: 'raiken-configuration',
       skipHydration: true,
     }
   )

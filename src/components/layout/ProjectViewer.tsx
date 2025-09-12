@@ -41,9 +41,29 @@ const ProjectViewer = () => {
     }
   };
 
+  // Determine if status bar should be shown
+  const shouldShowStatus = (status: { action: SystemAction; message: string; type: StatusType }) => {
+    // Hide status bar for idle states with empty or generic messages
+    if (status.type === 'idle' && (
+      status.message === '' || 
+      status.message === 'Ready' || 
+      status.action === 'IDLE'
+    )) {
+      return false;
+    }
+    
+    // Hide for browser closed states unless there's an error
+    if (status.action === 'BROWSER_CLOSED' && status.type !== 'error') {
+      return false;
+    }
+    
+    // Show for all other statuses (loading, success, error, info, meaningful idle)
+    return true;
+  };
+
   // Handle DOM tree updates from the browser component
   const handleDOMTreeUpdate = (newDomTree: DOMNode | null) => {
-    console.log('[Arten] DOM tree received in ProjectViewer');
+    console.log('[Raiken] DOM tree received in ProjectViewer');
     setDomTree(newDomTree);
   };
 
@@ -52,11 +72,16 @@ const ProjectViewer = () => {
     addTestScript(testScript);
     addGeneratedTest(testScript);
     setStatus('TEST_GENERATED', 'Test script generated successfully', 'success');
+    // Clear status after showing success briefly
+    setTimeout(() => {
+      const { clearStatus } = useBrowserStore.getState();
+      clearStatus();
+    }, 3000);
   };
 
   // Handle when a test should be run
   const handleRunTest = async (test: string) => {
-    console.log('[Arten] Running test script:', test.substring(0, 100) + '...');
+    console.log('[Raiken] Running test script:', test.substring(0, 100) + '...');
     setStatus('RUNNING_TEST', 'Executing test script...', 'loading');
   };
 
@@ -86,11 +111,11 @@ const ProjectViewer = () => {
                   width="100%"
                   onDOMTreeUpdate={handleDOMTreeUpdate}
                   onNodeSelect={(node) => {
-                    console.log('[Arten] Node selected in browser:', node);
+                    console.log('[Raiken] Node selected in browser:', node);
                     setSelectedNode(node);
                   }}
                   onTestResultUpdate={(result) => {
-                    console.log('[Arten] Test execution result:', result);
+                    console.log('[Raiken] Test execution result:', result);
                   }}
                 />
               </div>
@@ -147,24 +172,26 @@ const ProjectViewer = () => {
           </ResizablePanelGroup>
         </div>
 
-        {/* Status bar */}
-        <div className="min-h-[28px] max-h-[120px] border-t border-border bg-primary text-[12px] text-primary-foreground flex items-center px-3 py-1">
-          <div className="flex items-center gap-3 w-full overflow-hidden">
-            <div className="flex items-center gap-2 flex-1 min-w-0">
-              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${getStatusColor(status.type)}`} />
-              <span className="break-words leading-relaxed">{status.message}</span>
+        {/* Status bar - thin line for system status - only show when there's meaningful status */}
+        {shouldShowStatus(status) && (
+          <div className="h-[24px] border-t border-border bg-slate-800 text-[11px] text-slate-300 flex items-center px-3">
+            <div className="flex items-center gap-3 w-full overflow-hidden">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${getStatusColor(status.type)}`} />
+                <span className="truncate font-mono">{status.message}</span>
+              </div>
+              {url && (
+                <>
+                  <span className="text-slate-500">•</span>
+                  <span className="text-slate-400 truncate max-w-xs font-mono text-[10px]" title={url}>{url}</span>
+                </>
+              )}
+              <span className="ml-auto text-slate-500 font-medium text-[10px]">Raiken</span>
             </div>
-            {url && (
-              <>
-                <span className="text-primary-foreground/60">•</span>
-                <span className="text-primary-foreground/80 truncate max-w-xs" title={url}>URL: {url}</span>
-              </>
-            )}
-            <span className="ml-auto text-primary-foreground/60 font-medium">Arten</span>
           </div>
-        </div>
+        )}
         
-        {/* Floating Local Bridge Status Notification */}
+        {/* Local Bridge Status Manager - updates the status bar */}
         <LocalBridgeStatus />
         <NotificationContainer />
       </div>

@@ -93,12 +93,12 @@ const SideBar = ({ onNodeSelect }: SideBarProps) => {
 
     // Add both event listeners
     window.addEventListener('message', handleMessage);
-    window.addEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
+    window.addEventListener('raiken:dom-tree-update', handleCustomEvent as EventListener);
     
     // Clean up both event listeners
     return () => {
       window.removeEventListener('message', handleMessage);
-      window.removeEventListener('arten:dom-tree-update', handleCustomEvent as EventListener);
+      window.removeEventListener('raiken:dom-tree-update', handleCustomEvent as EventListener);
     };
   }, [setDomTree]); // setDomTree is stable from Zustand store
 

@@ -37,7 +37,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
   // Update URL in prompt when it changes - but only on first mount
   useEffect(() => {
     if (url && typeof url === 'string') {
-      console.log('[Arten] Setting initial JSON test script from URL');
+      console.log('[Raiken] Setting initial JSON test script from URL');
       setJsonTestScript(url);
     }
   }, [url, setJsonTestScript]); // Include dependencies for proper effect behavior
@@ -64,7 +64,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
 
   // Function to handle changes in the JSON test script editor
   const handleJsonTestScriptChange = (newScript: string) => {
-    console.log('[Arten] JSON test script updated');
+    console.log('[Raiken] JSON test script updated');
     setJsonTestScript(newScript);
     validateTestScript(newScript);
   };
@@ -83,7 +83,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       
       // Notify parent component that test was generated (for adding to tabbed editor)
       if (onTestGenerated && generatedTests.length > 0) {
-        console.log('[Arten] Adding generated test to tabbed editor');
+        console.log('[Raiken] Adding generated test to tabbed editor');
         const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
         let testName = 'Generated Test'; // Default name without timestamp
         
@@ -97,7 +97,7 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
             testName = `Generated Test ${timestamp}`;
           }
         } catch (e) {
-          console.warn('[Arten] Could not parse JSON test script for name:', e);
+          console.warn('[Raiken] Could not parse JSON test script for name:', e);
           // For unparseable JSON, use timestamp to make it unique
           testName = `Generated Test ${timestamp}`;
         }
@@ -113,6 +113,11 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       }
 
       setStatus('TEST_GENERATED', 'Test script generated successfully', 'success');
+      // Clear status after showing success briefly
+      setTimeout(() => {
+        const { clearStatus } = useBrowserStore.getState();
+        clearStatus();
+      }, 3000);
     } catch (error) {
       setStatus('TEST_ERROR', `Test generation failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
     }

@@ -40,7 +40,7 @@ export class ReportsService {
     if (!fs.existsSync(this.reportsDir)) {
       fs.mkdirSync(this.reportsDir, { recursive: true });
     }
-    console.log(`[Arten] Reports will be saved to: ${this.reportsDir}`);
+    console.log(`[Raiken] Reports will be saved to: ${this.reportsDir}`);
   }
   
   /**

@@ -1,7 +1,14 @@
 {
-  "name": "arten",
+  "name": "raiken",
   "version": "0.1.0",
+  "description": "AI-powered web testing automation tool with visual DOM inspection and Playwright integration",
   "private": true,
+  "author": "Armand",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/username/raiken"
+  },
+  "keywords": ["testing", "automation", "playwright", "ai", "dom-inspection"],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -17,7 +24,8 @@
     "docker:test": "docker-compose --profile test up --build playwright",
     "docker:down": "docker-compose down",
     "docker:clean": "docker-compose down -v --rmi all",
-    "docker:logs": "docker-compose logs -f"
+    "docker:logs": "docker-compose logs -f",
+    "install:browsers": "npx playwright install --with-deps"
   },
   "dependencies": {
     "@langchain/core": "^0.3.40",
