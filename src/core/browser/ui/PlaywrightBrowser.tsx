@@ -115,7 +115,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       try {
         console.log('[Raiken] Initializing browser on component mount...');
         setStatus('BROWSER_INITIALIZING' as SystemAction, 'Initializing browser...');
-        const response = await fetch('/api/browser', {
+        const response = await fetch('/api/v1/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'initialize' })
@@ -148,7 +148,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       if (isLaunched) {
         console.log('[Raiken] Closing browser on component unmount...');
         setStatus('BROWSER_CLOSING' as SystemAction, 'Closing browser...');
-        fetch('/api/browser', {
+        fetch('/api/v1/browser', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'close' })
@@ -175,7 +175,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       // Browser initialization - always ensure it's ready
       console.log('Ensuring browser is initialized...');
       setStatus('BROWSER_INITIALIZING' as SystemAction, 'Initializing browser...');
-      const initResponse = await fetch('/api/browser', {
+      const initResponse = await fetch('/api/v1/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'initialize' })
@@ -202,7 +202,7 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
       // Navigate to URL
       console.log('Navigating to URL:', inputUrl);
       setStatus('NAVIGATING' as SystemAction, `Navigating to ${inputUrl}...`);
-      const navResponse = await fetch('/api/browser', {
+      const navResponse = await fetch('/api/v1/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'navigate', url: inputUrl })
@@ -252,10 +252,10 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     setStatus('EXTRACTING_DOM' as SystemAction, 'Extracting DOM tree...');
     
     try {
-      const response = await fetch('/api/browser', {
+      const response = await fetch('/api/v1/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'extractDOM' })
+        body: JSON.stringify({ action: 'extract-dom' })
       });
       
       const data = await response.json();
@@ -292,11 +292,11 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     setStatus('TAKING_SCREENSHOT' as SystemAction, 'Taking screenshot...');
     
     try {
-      const response = await fetch('/api/browser', {
+      const response = await fetch('/api/v1/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          action: 'takeScreenshot',
+          action: 'take-screenshot',
           screenshotOptions: {
             fullPage: true,
             type: 'png'
@@ -329,10 +329,10 @@ export const PlaywrightBrowser: React.FC<PlaywrightBrowserProps> = ({
     console.log('Getting page info...');
     
     try {
-      const response = await fetch('/api/browser', {
+      const response = await fetch('/api/v1/browser', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getPageInfo' })
+        body: JSON.stringify({ action: 'get-page-info' })
       });
       
       const data = await response.json();

@@ -146,8 +146,8 @@ const ProjectViewer = () => {
                   </Button>
                   <ThemeToggle />
                 </nav>
-                {/* Tab navigation - removed Flow Studio tab */}
-                <div className="bg-muted border-b border-border h-10 flex items-center px-3">
+                {/* Tab navigation */}
+                <div className="bg-muted border-b border-border h-10 flex items-center px-3 mt-[1px]">
                   <div className="flex gap-2 h-full">
                     <button
                       className="px-3 h-full text-sm flex items-center border-b-2 border-primary font-medium"

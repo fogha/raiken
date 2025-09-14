@@ -237,11 +237,71 @@ export class OpenRouterService {
       // Wrap natural language into minimal instruction
       userPrompt = `Generate a Playwright test that automates the following scenario:\n\n"""\n${testSpecJson}\n"""`;
     } else {
-      // Pass through the JSON spec verbatim
-      userPrompt = `Using the JSON test specification below, generate the Playwright test.\nReturn **only** TypeScript code.\n\nJSON SPEC:\n\n${testSpecJson}`;
+      // Enhanced JSON spec processing with proper context
+      userPrompt = this.createEnhancedJSONPrompt(testSpecJson);
     }
 
     return { systemPrompt, userPrompt };
+  }
+
+  /**
+   * Create enhanced user prompt for JSON test specifications
+   */
+  private createEnhancedJSONPrompt(testSpecJson: string): string {
+    return `TASK: Generate a comprehensive Playwright test based on the JSON specification below.
+
+IMPORTANT: All examples and patterns provided below are for DIRECTIONAL GUIDANCE ONLY. 
+Always adapt implementations based on your specific DOM context and application requirements.
+
+CONTEXT: This JSON contains a structured test definition with:
+- Test metadata (name, description, type)
+- Step-by-step actions to perform in the "steps" array
+- Assertions to verify success in the "assertions" array
+- Error handling expectations
+
+CRITICAL REQUIREMENTS:
+1. Convert each JSON step to proper Playwright actions using the provided DOM context
+2. Translate English selector descriptions to robust Playwright selectors
+3. Include proper waits and error handling between actions
+4. Support multilingual interfaces (English/French for international sites)
+5. Add comprehensive assertions for all verification points
+6. Return ONLY executable TypeScript code with proper imports
+
+ENGLISH SELECTOR TRANSLATION GUIDELINES:
+(Note: These are generic examples for directional guidance only - adapt based on your specific DOM context)
+- "action button" → page.getByRole('button', { name: /action|action_french/i })
+- "input field" → page.getByLabel(/field|field_label/i) or page.getByPlaceholder(/placeholder_text/i)
+- "text input" → page.getByLabel(/input_description/i)
+- "form button" → page.getByRole('button', { name: /button_text|button_text_alt/i })
+- Always use flexible regex matching for multilingual compatibility
+
+ACTION MAPPING FOR JSON STEPS:
+(Note: These are pattern examples - implement based on your actual JSON structure)
+- "navigate" action → await page.goto(url) + await page.waitForLoadState('networkidle')
+- "click" action → await element.click() (locate element using provided selector description)
+- "type"/"fill" action → await element.fill(value) (use value from JSON)
+- "wait" action → prefer await expect(element).toBeVisible() over arbitrary timeouts
+- "hover" action → await element.hover()
+- "select" action → await element.selectOption(value)
+
+ASSERTION MAPPING FOR JSON ASSERTIONS:
+(Note: These are common patterns - adapt to your specific assertion requirements)
+- "element" type → await expect(element).toBeVisible() or .toContainText()
+- "url" type with "equals" → await expect(page).toHaveURL(expectedUrl)
+- "text" type → await expect(element).toContainText(expectedText)
+- Error handling → await expect(errorElement).not.toBeVisible()
+
+GENERAL GUIDANCE:
+- Analyze the provided DOM context to understand the actual page structure
+- Use semantic selectors that work with the specific application being tested
+- Support multilingual interfaces when relevant to the target platform
+- Implement appropriate waits and error handling for the specific user flow
+
+JSON TEST SPECIFICATION:
+
+${testSpecJson}
+
+Generate the complete, executable Playwright test with proper TypeScript typing:`;
   }
 
   /**
@@ -250,7 +310,14 @@ export class OpenRouterService {
   private buildSystemPrompt(domSnippet: string): string {
     const baseRules = `### ROLE\nYou are an expert Playwright-Test engineer. Produce clear, maintainable TypeScript tests.\n\n`;
 
-    const quickRules = `### QUICK RULES\n1. NEVER use page.waitForTimeout; rely on auto-waiting or expect().\n2. Selector preference: data-test-id → role/label → visible text → css.\n3. Add at least one assertion proving the user goal succeeded (toast, URL, etc.).\n4. Return ONLY valid TypeScript code – no extra prose.\n`;
+    const quickRules = `### QUICK RULES
+1. NEVER use page.waitForTimeout; rely on auto-waiting or expect()
+2. Selector preference: data-test-id → role/label → visible text → css
+3. For JSON specs: Convert "selector" fields from English to proper Playwright selectors
+4. Add assertions proving success (URL change, success message, element visibility)
+5. Support multilingual UI: use regex like { name: /login|connexion/i }
+6. Return ONLY valid TypeScript code with imports and proper test structure
+`;
 
     const domSection = domSnippet
       ? `\n### DOM CONTEXT (read-only)\n${domSnippet}\n`
@@ -273,11 +340,11 @@ export class OpenRouterService {
 1. CRITICAL: ENGLISH SELECTOR TRANSLATION
    **The test specification will contain selectors written in plain English. You MUST translate these to proper Playwright selectors using the DOM context provided.**
    
-   Examples of English selectors you'll encounter:
-   - "login button" → Find button with "login" text in DOM → page.getByRole('button', { name: 'Login' })
-   - "email field" → Find input with email-related attributes → page.getByLabel('Email') or page.getByPlaceholder('Enter email')
-   - "purple save button" → Find button with save text and purple styling → page.getByRole('button', { name: 'Save' })
-   - "submit form" → Find form or submit button → page.getByRole('button', { name: 'Submit' })
+   Examples of English selector patterns (adapt to your specific DOM):
+   - "action button" → Find button with action text in DOM → page.getByRole('button', { name: 'ActionText' })
+   - "input field" → Find input with relevant attributes → page.getByLabel('FieldLabel') or page.getByPlaceholder('Placeholder')
+   - "styled button" → Find button with specific text and styling → page.getByRole('button', { name: 'ButtonText' })
+   - "form element" → Find form or form control → page.getByRole('button', { name: 'SubmitText' })
 
 2. SELECTOR STRATEGY WITH DOM CONTEXT:
    - **ONLY use the DOM structure provided above** - do not assume elements exist
@@ -285,8 +352,8 @@ export class OpenRouterService {
    - Use ARIA roles and labels for accessibility
    - Match text content for buttons and links exactly as shown in DOM
    - For natural language descriptions, search the DOM JSON for matching elements
-   - Example: If DOM shows <button data-testid="login-btn">Login</button>, use page.getByTestId('login-btn')
-   - Example: If DOM shows <input placeholder="Enter email">, use page.getByPlaceholder('Enter email')
+   - Example: If DOM shows <button data-testid="action-btn">ActionText</button>, use page.getByTestId('action-btn')
+   - Example: If DOM shows <input placeholder="Enter value">, use page.getByPlaceholder('Enter value')
 
 3. ENGLISH TO PLAYWRIGHT SELECTOR MAPPING:
    - "button" descriptions → Look for <button> tags or role="button" in DOM
@@ -367,27 +434,30 @@ export class OpenRouterService {
           - Log important steps for debugging
 
       EXAMPLE OUTPUT FORMAT:
-      \`\`\`typescript
       import { test, expect } from '@playwright/test';
 
       test.describe('Generated Test Suite', () => {
         test('should perform the requested actions', async ({ page }) => {
           // Navigate to the application
-          await page.goto('URL_HERE');
+          await page.goto('https://example.com');
           
           // Wait for page to load
           await page.waitForLoadState('networkidle');
           
           // Perform test actions based on description
-          // ... generated test steps ...
+          await page.getByRole('button', { name: 'Login' }).click();
+          await page.getByLabel('Email').fill('test@example.com');
           
           // Verify expected outcomes
-          // ... generated assertions ...
+          await expect(page.getByText('Welcome')).toBeVisible();
         });
       });
-      \`\`\`
+      
+      CRITICAL: Use concrete values, NOT template strings or placeholders like URL_HERE, {{variable}}.
 
       Return ONLY the executable Playwright test script without any explanations outside of code comments.
+      
+      CRITICAL: Tests should NOT contain template strings, variables, or placeholders like {{URL}}, {{variable}}, or URL_HERE. All values must be concrete and ready to execute.
     `;
 
   guidelines += `\n\nIMPORTANT GUIDELINES FOR TEST GENERATION:

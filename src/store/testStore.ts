@@ -278,9 +278,10 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
         try {
           const spec = JSON.parse(state.jsonTestScript || '{}');
           const base = (spec.name || 'test').toString().replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-          pathToExecute = `generated-tests/${base}.spec.ts`;
+          const filename = `${base}.spec.ts`;
+          pathToExecute = localBridge.isConnected() ? filename : `generated-tests/${filename}`;
         } catch {
-          pathToExecute = 'generated-tests/test.spec.ts';
+          pathToExecute = localBridge.isConnected() ? 'test.spec.ts' : 'generated-tests/test.spec.ts';
         }
       }
     }

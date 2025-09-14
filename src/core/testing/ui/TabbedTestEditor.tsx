@@ -60,13 +60,14 @@ export function TabbedTestEditor() {
     setSavingTabs(prev => new Set(prev).add(tab.id));
     
     try {
-      const response = await fetch('/api/save-test', {
+      const response = await fetch('/api/v1/tests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: tab.name,
+          action: 'save',
+          filename: tab.name,
           content: tab.content,
           tabId: tab.id
         }),
@@ -76,7 +77,8 @@ export function TabbedTestEditor() {
         const error = await response.json();
         console.error('Failed to save test:', error.error);
       } else {
-        console.log('Test saved successfully');
+        const result = await response.json();
+        console.log('Test saved successfully to:', result.filePath);
       }
     } catch (error) {
       console.error('Error saving test:', error);

@@ -4,10 +4,18 @@ import React from 'react';
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from 'lucide-react';
 import { ConfigurationPanel } from '@/components/ConfigurationPanel';
+import { TestExecutionSettings } from '@/components/TestExecutionSettings';
 import { useConfigurationStore } from '@/store/configurationStore';
+import { useTestStore } from '@/store/testStore';
 
 export function SettingsPage() {
   const { reset } = useConfigurationStore();
+  const { resetExecutionConfig } = useTestStore();
+
+  const handleResetAll = () => {
+    reset();
+    resetExecutionConfig();
+  };
 
   return (
     <div className="container max-w-4xl mx-auto py-8">
@@ -27,19 +35,30 @@ export function SettingsPage() {
         </div>
         
         <div className="flex gap-2 items-center">
-          <Button variant="outline" size="sm" onClick={reset}>
-            Reset to Defaults
+          <Button variant="outline" size="sm" onClick={handleResetAll}>
+            Reset All to Defaults
           </Button>
         </div>
       </div>
-      <div className="mt-6">
-        <ConfigurationPanel />
+      
+      <div className="space-y-8">
+        {/* New Test Execution Settings */}
+        <div>
+          <TestExecutionSettings />
+        </div>
+        
+        {/* Legacy Configuration Panel */}
+        <div>
+          <ConfigurationPanel />
+        </div>
       </div>
       
       <div className="mt-8 p-4 bg-muted/50 rounded-lg">
         <h3 className="text-sm font-medium mb-2">Configuration Info</h3>
         <p className="text-xs text-muted-foreground">
-          Settings are automatically saved when changed. These configurations will be used for all Playwright test executions, including browser selection, retry behavior, timeouts, and feature flags like screenshots, video recording, and tracing.
+          Settings are automatically saved when changed. The Test Execution Settings above control how tests are run, 
+          while the Configuration Panel below contains legacy settings. All configurations will be used for Playwright 
+          test executions, including browser selection, retry behavior, timeouts, and debugging features.
         </p>
       </div>
     </div>

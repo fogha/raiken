@@ -26,6 +26,8 @@ export async function POST(request: NextRequest) {
         return handleExecuteTest(params);
       case 'close':
         return handleClose(params);
+      case 'get-page-info':
+        return handleGetPageInfo(params);
       default:
         return NextResponse.json(
           { success: false, error: `Unknown action: ${action}` },
@@ -45,7 +47,7 @@ async function handleInitialize(params: any) {
   const { headless = true, browserType = 'chromium', scriptId } = params;
   
   try {
-    await playwrightService.launch(browserType, headless, scriptId);
+    await playwrightService.initialize(scriptId, browserType, headless);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json(
@@ -66,7 +68,7 @@ async function handleNavigate(params: any) {
   }
 
   try {
-    await playwrightService.navigateToUrl(url, scriptId);
+    await playwrightService.navigate(url, scriptId);
     return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json(
@@ -80,7 +82,7 @@ async function handleExtractDOM(params: any) {
   const { scriptId } = params;
   
   try {
-    const domTree = await playwrightService.extractDOMTree(scriptId);
+    const domTree = await playwrightService.extractDOM();
     return NextResponse.json({ success: true, domTree });
   } catch (error: any) {
     return NextResponse.json(
@@ -94,7 +96,7 @@ async function handleScreenshot(params: any) {
   const { scriptId, clip } = params;
   
   try {
-    const screenshot = await playwrightService.takeScreenshot({ scriptId, clip });
+    const screenshot = await playwrightService.takeScreenshot({ clip });
     return NextResponse.json({ success: true, screenshot });
   } catch (error: any) {
     return NextResponse.json(
@@ -130,11 +132,24 @@ async function handleClose(params: any) {
   
   try {
     if (scriptId) {
-      await playwrightService.closeBrowser(scriptId);
+      await playwrightService.close(scriptId);
     } else {
-      await playwrightService.closeAllBrowsers();
+      await playwrightService.close();
     }
     return NextResponse.json({ success: true });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+
+async function handleGetPageInfo(params: any) {
+  try {
+    const pageInfo = await playwrightService.getPageInfo();
+    return NextResponse.json({ success: true, pageInfo });
   } catch (error: any) {
     return NextResponse.json(
       { success: false, error: error.message },

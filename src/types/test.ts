@@ -103,6 +103,36 @@ export interface UITestReport {
   resultFile: string;
   browser?: string;
   retries?: number;
+  rawPlaywrightOutput?: string;
+  rawPlaywrightError?: string;
+  exitCode?: number;
+  
+  // Debugging artifacts
+  screenshots?: Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+    url?: string; // For serving the image
+  }>;
+  videos?: Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+    url?: string; // For serving the video
+  }>;
+  browserLogs?: Array<{
+    level: 'error' | 'warning' | 'info' | 'debug';
+    message: string;
+    timestamp: string;
+  }>;
+  networkLogs?: Array<{
+    url: string;
+    method: string;
+    status: number;
+    timestamp: string;
+  }>;
+  
+  // Parsed errors
   errors?: Array<{
     message: string;
     location?: {
@@ -110,6 +140,8 @@ export interface UITestReport {
       line: number;
       column: number;
     };
-    stack?: string; // Full Playwright error stack trace
+    stack?: string;
+    testName?: string;
+    step?: string;
   }>;
 }

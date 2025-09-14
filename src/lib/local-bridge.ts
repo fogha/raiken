@@ -68,13 +68,14 @@ class LocalBridgeService {
     }
 
     try {
-      const response = await fetch(`${this.connection.url}/api/save-test`, {
+      const response = await fetch(`${this.connection.url}/api/v1/tests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.connection.token}`
         },
         body: JSON.stringify({
+          action: 'save',
           content: testCode,
           filename,
           tabId

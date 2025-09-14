@@ -1,0 +1,41 @@
+{
+  "id": "report-1757846710986-j1vuwzk",
+  "timestamp": "2025-09-14T10:45:10.986Z",
+  "testName": "Wakiti Login Test",
+  "testPath": "generated-tests/wakiti_login_test.spec.ts",
+  "status": "failed",
+  "duration": 1126,
+  "exitCode": 1,
+  "screenshots": [],
+  "videos": [],
+  "traces": [],
+  "rawOutput": "{\n  \"config\": {\n    \"configFile\": \"/Users/Armand/Documents/Code/raiken/temp-configs/playwright-1757846683295-6sri1nswf.config.js\",\n    \"rootDir\": \"/Users/Armand/Documents/Code/raiken/generated-tests\",\n    \"forbidOnly\": false,\n    \"fullyParallel\": false,\n    \"globalSetup\": null,\n    \"globalTeardown\": null,\n    \"globalTimeout\": 0,\n    \"grep\": {},\n    \"grepInvert\": null,\n    \"maxFailures\": 1,\n    \"metadata\": {},\n    \"preserveOutput\": \"always\",\n    \"reporter\": [\n      [\n        \"json\"\n      ]\n    ],\n    \"reportSlowTests\": {\n      \"max\": 5,\n      \"threshold\": 300000\n    },\n    \"quiet\": false,\n    \"projects\": [\n      {\n        \"outputDir\": \"/Users/Armand/Documents/Code/raiken/test-results\",\n        \"repeatEach\": 1,\n        \"retries\": 1,\n        \"metadata\": {},\n        \"id\": \"chromium\",\n        \"name\": \"chromium\",\n        \"testDir\": \"/Users/Armand/Documents/Code/raiken/generated-tests\",\n        \"testIgnore\": [],\n        \"testMatch\": [\n          \"**/*.@(spec|test).?(c|m)[jt]s?(x)\"\n        ],\n        \"timeout\": 30000\n      }\n    ],\n    \"shard\": null,\n    \"updateSnapshots\": \"missing\",\n    \"updateSourceMethod\": \"patch\",\n    \"version\": \"1.51.1\",\n    \"workers\": 1,\n    \"webServer\": null\n  },\n  \"suites\": [],\n  \"errors\": [\n    {\n      \"message\": \"TypeError: \\\"\\\" is not a function\",\n      \"stack\": \"TypeError: \\\"\\\" is not a function\\n    at Object.<anonymous> (/Users/Armand/Documents/Code/raiken/generated-tests/wakiti_login_test.spec.ts:1:4)\",\n      \"location\": {\n        \"file\": \"/Users/Armand/Documents/Code/raiken/generated-tests/wakiti_login_test.spec.ts\",\n        \"column\": 4,\n        \"line\": 1\n      },\n      \"snippet\": \"   at wakiti_login_test.spec.ts:1\\n\\n\\u001b[0m\\u001b[31m\\u001b[1m>\\u001b[22m\\u001b[39m\\u001b[90m 1 |\\u001b[39m \\u001b[32m``\\u001b[39m\\u001b[32m`typescript\\u001b[39m\\n \\u001b[90m   |\\u001b[39m    \\u001b[31m\\u001b[1m^\\u001b[22m\\u001b[39m\\n \\u001b[90m 2 |\\u001b[39m \\u001b[32mimport { test, expect } from '@playwright/test';\\u001b[39m\\n \\u001b[90m 3 |\\u001b[39m \\u001b[32m\\u001b[39m\\n \\u001b[90m 4 |\\u001b[39m \\u001b[32mtest.describe('WAKITI Login Test', () => {\\u001b[39m\\u001b[0m\"\n    },\n    {\n      \"message\": \"Error: No tests found.\\nMake sure that arguments are regular expressions matching test files.\\nYou may need to escape symbols like \\\"$\\\" or \\\"*\\\" and quote the arguments.\",\n      \"stack\": \"Error: No tests found.\\nMake sure that arguments are regular expressions matching test files.\\nYou may need to escape symbols like \\\"$\\\" or \\\"*\\\" and quote the arguments.\"\n    }\n  ],\n  \"stats\": {\n    \"startTime\": \"2025-09-14T10:45:10.960Z\",\n    \"duration\": 11.349999999999909,\n    \"expected\": 0,\n    \"skipped\": 0,\n    \"unexpected\": 0,\n    \"flaky\": 0\n  }\n}\n",
+  "rawError": "",
+  "summary": "Test failed - check error details below",
+  "suggestions": "Review the error messages, screenshots, and browser logs for debugging information",
+  "errors": [
+    {
+      "message": "TypeError: \"\" is not a function",
+      "stack": "TypeError: \"\" is not a function\n    at Object.<anonymous> (/Users/Armand/Documents/Code/raiken/generated-tests/wakiti_login_test.spec.ts:1:4)"
+    },
+    {
+      "message": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments.",
+      "stack": "Error: No tests found.\nMake sure that arguments are regular expressions matching test files.\nYou may need to escape symbols like \"$\" or \"*\" and quote the arguments."
+    },
+    {
+      "message": "Error: No tests found."
+    },
+    {
+      "message": "Error: No tests found."
+    },
+    {
+      "message": "\\\"\\\" is not a function\",",
+      "location": {
+        "file": "Object.<anonymous> (/Users/Armand/Documents/Code/raiken/generated-tests/wakiti_login_test.spec.ts",
+        "line": 1,
+        "column": 4
+      }
+    }
+  ],
+  "browserLogs": []
+}

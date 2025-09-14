@@ -1,0 +1,83 @@
+{
+  "type": "ui-test",
+  "name": "WAKITI Login Test",
+  "description": "Test login functionality for WAKITI bus booking platform",
+  "steps": [
+    {
+      "action": "navigate",
+      "url": "http://80.190.83.73:3000"
+    },
+    {
+      "action": "wait",
+      "ms": 2000
+    },
+    {
+      "action": "click",
+      "element": "button",
+      "selector": "Login or Sign in button in navigation"
+    },
+    {
+      "action": "wait",
+      "ms": 1500
+    },
+    {
+      "action": "type",
+      "element": "input",
+      "value": "test.user@email.com",
+      "id": "email",
+      "selector": "Email input field"
+    },
+    {
+      "action": "wait",
+      "ms": 500
+    },
+    {
+      "action": "type",
+      "element": "input",
+      "value": "testPassword1234!",
+      "id": "password",
+      "selector": "Password input field"
+    },
+    {
+      "action": "wait",
+      "ms": 1000
+    },
+    {
+      "action": "click",
+      "element": "button",
+      "selector": "Login submit button"
+    },
+    {
+      "action": "wait",
+      "ms": 3000
+    }
+  ],
+  "assertions": [
+    {
+      "type": "element",
+      "selector": "user profile or dashboard",
+      "condition": "User should be redirected to dashboard or profile page",
+      "timeout": 5000
+    },
+    {
+      "type": "url",
+      "condition": "equals",
+      "value": "http://80.190.83.73:3000/dashboard",
+      "timeout": 3000
+    },
+    {
+      "type": "element",
+      "selector": "welcome message or user name",
+      "condition": "Welcome message should be visible",
+      "timeout": 3000
+    }
+  ],
+  "errorHandling": [
+    {
+      "type": "element",
+      "selector": "error message",
+      "condition": "No error messages should be displayed",
+      "timeout": 2000
+    }
+  ]
+}

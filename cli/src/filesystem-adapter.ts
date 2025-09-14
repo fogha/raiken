@@ -88,8 +88,24 @@ export class LocalFileSystemAdapter {
     try {
       const { spawn } = require('child_process');
       
+      // Resolve test path - if it's just a filename, look in the test directory
+      let resolvedTestPath = testPath;
+      
+      // If testPath is just a filename (no directory), look for it in the project's test directory
+      if (!testPath.includes('/') && !testPath.includes('\\')) {
+        const testFileInTestDir = path.join(this.testDirectory, testPath);
+        try {
+          await fs.access(testFileInTestDir);
+          resolvedTestPath = path.relative(this.projectPath, testFileInTestDir);
+          console.log(`✅ Found test file in test directory: ${testFileInTestDir}`);
+        } catch {
+          console.log(`❌ Test file not found in test directory: ${testFileInTestDir}`);
+          // Keep original path and let Playwright handle the error
+        }
+      }
+      
       // Build Playwright command
-      const args = ['playwright', 'test', testPath];
+      const args = ['playwright', 'test', resolvedTestPath];
       
       if (config.headless === false) {
         args.push('--headed');
@@ -100,6 +116,10 @@ export class LocalFileSystemAdapter {
       }
 
       console.log(`Executing: npx ${args.join(' ')}`);
+      console.log(`Working directory: ${this.projectPath}`);
+      console.log(`Original test path: ${testPath}`);
+      console.log(`Resolved test path: ${resolvedTestPath}`);
+      console.log(`Test directory: ${this.testDirectory}`);
       
       return new Promise((resolve) => {
         const child = spawn('npx', args, {

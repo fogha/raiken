@@ -22,7 +22,7 @@ async function checkInstallation() {
 program
   .name('raiken')
   .description('AI-powered Playwright test generator - Local bridge for hosted platform')
-  .version('0.2.3', '-v, --version', 'output the current version');
+  .version('0.2.5', '-v, --version', 'output the current version');
 
 program
   .command('init')

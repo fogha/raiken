@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OpenRouterService } from '@/core/testing/services/openrouter.service';
 import * as testFileManager from '@/core/testing/services/testFileManager';
 import { TestSuiteManager } from '@/core/testing/services/testSuite';
+import { localBridge } from '@/lib/local-bridge';
 
 /**
  * Unified Tests API Handler
@@ -31,6 +32,8 @@ export async function POST(request: NextRequest) {
         return handleDeleteTest(params);
       case 'get-reports':
         return handleGetReports(params);
+      case 'delete-report':
+        return handleDeleteReport(params);
       default:
         return NextResponse.json(
           { success: false, error: `Unknown action: ${action}` },
@@ -71,16 +74,28 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const url = new URL(request.url);
+    const action = url.searchParams.get('action');
     const testPath = url.searchParams.get('path');
+    const reportId = url.searchParams.get('id');
 
-    if (!testPath) {
-      return NextResponse.json(
-        { success: false, error: 'Test path is required' },
-        { status: 400 }
-      );
+    if (action === 'delete-report') {
+      if (!reportId) {
+        return NextResponse.json(
+          { success: false, error: 'Report ID is required' },
+          { status: 400 }
+        );
+      }
+      return handleDeleteReport({ id: reportId });
+    } else {
+      // Default: delete test
+      if (!testPath) {
+        return NextResponse.json(
+          { success: false, error: 'Test path is required' },
+          { status: 400 }
+        );
+      }
+      return handleDeleteTest({ testPath });
     }
-
-    return handleDeleteTest({ testPath });
   } catch (error) {
     console.error('Tests API DELETE error:', error);
     return NextResponse.json(
@@ -137,7 +152,12 @@ async function handleExecuteTest(params: any) {
     headless = true,
     retries = 1,
     timeout = 30000,
-    features = {}
+    maxFailures = 1,
+    parallel = false,
+    workers = 1,
+    features = {},
+    outputDir = 'test-results',
+    reporters = ['json', 'html']
   } = params;
 
   if (!testPath) {
@@ -148,14 +168,19 @@ async function handleExecuteTest(params: any) {
   }
 
   try {
-    // Create a default test suite with the config
+    // Create a test suite with the user's configuration
     const suite = await testSuiteManager.createTestSuite({
-      name: 'default',
+      name: 'user-configured',
       browserType,
       headless,
       retries,
       timeout,
-      features
+      maxFailures,
+      features: {
+        screenshots: features.screenshots !== false,
+        video: features.video !== false,
+        tracing: features.tracing !== false
+      }
     });
     
     const result = await testSuiteManager.executeTest({
@@ -201,6 +226,31 @@ async function handleSaveTest(params: any) {
 
 async function handleListTests(params: any) {
   try {
+    // Try to load via local CLI first, then fallback to server
+    let bridgeConnection = localBridge.getConnectionInfo();
+    if (!bridgeConnection) {
+      console.log(`[Raiken] No bridge connection found, attempting to detect local CLI...`);
+      bridgeConnection = await localBridge.detectLocalCLI();
+    }
+
+    if (bridgeConnection && localBridge.isConnected()) {
+      console.log('[Raiken] 📁 Loading tests via local CLI...');
+      const result = await localBridge.getLocalTestFiles();
+      
+      if (result.success && result.files && Array.isArray(result.files)) {
+        console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from local project`);
+        return NextResponse.json({
+          success: true,
+          files: result.files
+        });
+      } else {
+        console.warn('[Raiken] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
+        // Continue to fallback below
+      }
+    }
+    
+    // Fallback: Load via hosted server (existing behavior)
+    console.log('[Raiken] 📁 Loading tests via hosted server...');
     const files = await testFileManager.listTestScripts();
     return NextResponse.json({
       success: true,
@@ -235,35 +285,75 @@ async function handleDeleteTest(params: any) {
   }
 }
 
+/**
+ * Extract a readable test name from a test file path
+ */
+function extractTestNameFromPath(testPath: string): string {
+  if (!testPath) return 'Unknown Test';
+  
+  try {
+    // Extract filename without extension
+    const filename = testPath.split('/').pop()?.replace('.spec.ts', '') || '';
+    
+    // Handle tab-based filenames (e.g., "wakiti_login_test_tab_1757669967942_193")
+    if (filename.includes('_tab_')) {
+      const parts = filename.split('_tab_')[0];
+      return parts
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    
+    // Handle regular filenames
+    return filename
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  } catch (error) {
+    console.warn('Failed to extract test name from path:', testPath, error);
+    return 'Unknown Test';
+  }
+}
+
 async function handleGetReports(params: any) {
   try {
-    const fs = await import('fs/promises');
-    const path = await import('path');
+    const { testReportsService } = await import('@/core/testing/services/reports.service');
+    const reports = await testReportsService.getReports();
     
-    const reportsDir = path.resolve(process.cwd(), 'test-results');
+    return NextResponse.json({
+      success: true,
+      reports
+    });
+  } catch (error: any) {
+    console.error('Failed to get reports:', error);
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+async function handleDeleteReport(params: any) {
+  const { id } = params;
+
+  if (!id) {
+    return NextResponse.json(
+      { success: false, error: 'Report ID is required' },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const { testReportsService } = await import('@/core/testing/services/reports.service');
+    const success = await testReportsService.deleteReport(id);
     
-    try {
-      const files = await fs.readdir(reportsDir);
-      const reportFiles = files.filter(file => file.startsWith('report-') && file.endsWith('.json'));
-      
-      const reports = await Promise.all(
-        reportFiles.map(async (file) => {
-          const filePath = path.join(reportsDir, file);
-          const content = await fs.readFile(filePath, 'utf8');
-          return JSON.parse(content);
-        })
+    if (success) {
+      return NextResponse.json({ success: true });
+    } else {
+      return NextResponse.json(
+        { success: false, error: 'Report not found or cannot be deleted' },
+        { status: 404 }
       );
-      
-      return NextResponse.json({
-        success: true,
-        reports: reports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      });
-    } catch (dirError) {
-      // Reports directory doesn't exist or is empty
-      return NextResponse.json({
-        success: true,
-        reports: []
-      });
     }
   } catch (error: any) {
     return NextResponse.json(

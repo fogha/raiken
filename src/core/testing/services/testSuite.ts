@@ -1,8 +1,8 @@
 // child_process.spawn is imported dynamically inside executeTest
 import fs from 'fs/promises';
 import path from 'path';
-import { createPlaywrightConfig, cleanupConfig } from '@/utils/playwright-config';
-import { ReportsService } from './reports.service';
+import { createPlaywrightConfig, cleanupConfig, validateConfig } from '@/utils/playwright-config';
+import { testReportsService } from './reports.service';
 
 interface TestSuiteConfig {
   id: string;
@@ -10,6 +10,7 @@ interface TestSuiteConfig {
   browserType: string;
   retries: number;
   timeout: number;
+  maxFailures: number;
   features: {
     screenshots: boolean;
     video: boolean;
@@ -37,16 +38,460 @@ interface TestExecutionResult {
   needsAIAnalysis: boolean; // Only true for failed tests
   suggestions?: string; // Added for AI analysis suggestions
   reportId?: string; // Added for AI analysis report ID
+  // Enhanced debugging information
+  detailedErrors?: Array<{
+    message: string;
+    stack?: string;
+    location?: {
+      file: string;
+      line: number;
+      column: number;
+    };
+    testName?: string;
+    step?: string;
+  }>;
+  screenshots?: Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+  }>;
+  videos?: Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+  }>;
+  browserLogs?: Array<{
+    level: 'error' | 'warning' | 'info' | 'debug';
+    message: string;
+    timestamp: string;
+  }>;
+  networkLogs?: Array<{
+    url: string;
+    method: string;
+    status: number;
+    timestamp: string;
+  }>;
+  testPath?: string;
+  exitCode?: number;
 }
 
 export class TestSuiteManager {
-  private reportsService: ReportsService;
   private testSuites = new Map<string, TestSuiteConfig>();
   private configCleanupTimeout = 30 * 60 * 1000; // 30 minutes
 
-  constructor(config: { apiKey: string; reportsDir: string }) {
-    this.reportsService = new ReportsService(config);
+  /**
+   * Parse Playwright error output to extract structured debugging information
+   */
+  private parsePlaywrightErrors(stdout: string, stderr: string): Array<{
+    message: string;
+    stack?: string;
+    location?: {
+      file: string;
+      line: number;
+      column: number;
+    };
+    testName?: string;
+    step?: string;
+  }> {
+    const errors: Array<{
+      message: string;
+      stack?: string;
+      location?: { file: string; line: number; column: number };
+      testName?: string;
+      step?: string;
+    }> = [];
+
+    const combinedOutput = `${stdout}\n${stderr}`;
     
+    // Enhanced Playwright error patterns
+    const errorPatterns = [
+      // Standard test failure format
+      {
+        regex: /(\d+)\)\s+(.+?)\s+›\s+(.+?)\n([\s\S]*?)(?=\n\s*\d+\)|$)/g,
+        extract: (match: RegExpExecArray) => {
+          const [, testNumber, testFile, testName, errorDetails] = match;
+          const errorMessageMatch = errorDetails.match(/Error:\s*(.+?)(?:\n|$)/);
+          const errorMessage = errorMessageMatch ? errorMessageMatch[1].trim() : 'Test failed';
+          
+          const locationMatch = errorDetails.match(/at\s+.*?([^/\s]+\.(?:ts|js|tsx|jsx)):(\d+):(\d+)/);
+          let location;
+          if (locationMatch) {
+            location = {
+              file: locationMatch[1],
+              line: parseInt(locationMatch[2]),
+              column: parseInt(locationMatch[3])
+            };
+          }
+          
+          const stepMatch = errorDetails.match(/(\d+\s+\|\s+.*?)(?:\n|$)/);
+          const step = stepMatch ? stepMatch[1].trim() : undefined;
+          
+          return {
+            message: errorMessage,
+            stack: errorDetails.trim(),
+            location,
+            testName: testName.trim(),
+            step
+          };
+        }
+      },
+      
+      // Timeout errors
+      {
+        regex: /TimeoutError:\s*(.+?)(?:\n|$)/g,
+        extract: (match: RegExpExecArray) => ({
+          message: `Timeout: ${match[1].trim()}`,
+          stack: match[0]
+        })
+      },
+      
+      // Selector errors
+      {
+        regex: /Error:\s*(?:waiting for|locator\.|page\.).*?(?:selector|element).*?(?:\n|$)/gi,
+        extract: (match: RegExpExecArray) => ({
+          message: match[0].replace(/^Error:\s*/, '').trim(),
+          stack: match[0]
+        })
+      },
+      
+      // Navigation errors
+      {
+        regex: /Error:\s*(?:page\.goto|navigation|net::ERR_).*?(?:\n|$)/gi,
+        extract: (match: RegExpExecArray) => ({
+          message: match[0].replace(/^Error:\s*/, '').trim(),
+          stack: match[0]
+        })
+      },
+      
+      // Assertion errors
+      {
+        regex: /expect\(.*?\)\..*?(?:\n|$)/gi,
+        extract: (match: RegExpExecArray) => ({
+          message: `Assertion failed: ${match[0].trim()}`,
+          stack: match[0]
+        })
+      },
+      
+      // JavaScript errors in browser
+      {
+        regex: /(?:TypeError|ReferenceError|SyntaxError|RangeError):\s*(.+?)(?:\n|$)/g,
+        extract: (match: RegExpExecArray) => ({
+          message: match[0].trim(),
+          stack: match[0]
+        })
+      }
+    ];
+    
+    // Apply all error patterns
+    for (const pattern of errorPatterns) {
+      let match;
+      while ((match = pattern.regex.exec(combinedOutput)) !== null) {
+        const error = pattern.extract(match);
+        if (error && !errors.some(e => e.message === error.message)) {
+          errors.push(error);
+        }
+      }
+    }
+    
+    // If no structured errors found, try to extract general error information
+    if (errors.length === 0) {
+      const generalErrorMatch = combinedOutput.match(/Error:\s*(.+?)(?:\n|$)/);
+      if (generalErrorMatch) {
+        errors.push({
+          message: generalErrorMatch[1].trim(),
+          stack: combinedOutput.trim()
+        });
+      }
+    }
+    
+    return errors;
+  }
+
+  /**
+   * Collect screenshots generated during test execution
+   */
+  private async collectScreenshots(testPath: string): Promise<Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+  }> | undefined> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Playwright typically saves screenshots in test-results directory
+      const testResultsDir = path.resolve(process.cwd(), 'test-results');
+      
+      try {
+        const entries = await fs.readdir(testResultsDir, { withFileTypes: true });
+        const screenshots: Array<{ name: string; path: string; timestamp: string }> = [];
+        
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const testDir = path.join(testResultsDir, entry.name);
+            try {
+              const files = await fs.readdir(testDir);
+              const screenshotFiles = files.filter(file => 
+                file.endsWith('.png') || file.endsWith('.jpg') || file.endsWith('.jpeg')
+              );
+              
+              for (const file of screenshotFiles) {
+                const filePath = path.join(testDir, file);
+                const stats = await fs.stat(filePath);
+                screenshots.push({
+                  name: file,
+                  path: filePath,
+                  timestamp: stats.mtime.toISOString()
+                });
+              }
+            } catch (dirError) {
+              // Skip directories we can't read
+              continue;
+            }
+          }
+        }
+        
+        return screenshots.length > 0 ? screenshots : undefined;
+      } catch (dirError) {
+        return undefined;
+      }
+    } catch (error) {
+      console.warn('[TestSuite] Failed to collect screenshots:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Collect videos generated during test execution
+   */
+  private async collectVideos(testPath: string): Promise<Array<{
+    name: string;
+    path: string;
+    timestamp: string;
+  }> | undefined> {
+    try {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      
+      // Playwright typically saves videos in test-results directory
+      const testResultsDir = path.resolve(process.cwd(), 'test-results');
+      
+      try {
+        const entries = await fs.readdir(testResultsDir, { withFileTypes: true });
+        const videos: Array<{ name: string; path: string; timestamp: string }> = [];
+        
+        for (const entry of entries) {
+          if (entry.isDirectory()) {
+            const testDir = path.join(testResultsDir, entry.name);
+            try {
+              const files = await fs.readdir(testDir);
+              const videoFiles = files.filter(file => 
+                file.endsWith('.webm') || file.endsWith('.mp4')
+              );
+              
+              for (const file of videoFiles) {
+                const filePath = path.join(testDir, file);
+                const stats = await fs.stat(filePath);
+                videos.push({
+                  name: file,
+                  path: filePath,
+                  timestamp: stats.mtime.toISOString()
+                });
+              }
+            } catch (dirError) {
+              // Skip directories we can't read
+              continue;
+            }
+          }
+        }
+        
+        return videos.length > 0 ? videos : undefined;
+      } catch (dirError) {
+        return undefined;
+      }
+    } catch (error) {
+      console.warn('[TestSuite] Failed to collect videos:', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * Extract browser console logs from Playwright output
+   */
+  private extractBrowserLogs(stdout: string, stderr: string): Array<{
+    level: 'error' | 'warning' | 'info' | 'debug';
+    message: string;
+    timestamp: string;
+  }> | undefined {
+    const logs: Array<{
+      level: 'error' | 'warning' | 'info' | 'debug';
+      message: string;
+      timestamp: string;
+    }> = [];
+    
+    const combinedOutput = `${stdout}\n${stderr}`;
+    
+    // Enhanced console log patterns
+    const consolePatterns = [
+      // Standard console methods
+      { regex: /console\.(log|error|warn|info|debug)\s+(.+)/g, type: 'console' },
+      
+      // Browser errors
+      { regex: /Uncaught\s+(TypeError|ReferenceError|SyntaxError|Error):\s*(.+)/g, type: 'error' },
+      
+      // Page errors
+      { regex: /page\.on\('pageerror'\)\s*(.+)/g, type: 'error' },
+      
+      // Network errors in console
+      { regex: /Failed to load resource:\s*(.+)/g, type: 'error' },
+      
+      // Promise rejections
+      { regex: /Uncaught \(in promise\)\s*(.+)/g, type: 'error' },
+      
+      // CORS errors
+      { regex: /Access to .+ from origin .+ has been blocked by CORS policy:\s*(.+)/g, type: 'error' },
+      
+      // 404 and other HTTP errors
+      { regex: /GET .+ (404|500|403|401) \(.+\)/g, type: 'error' },
+      
+      // JavaScript runtime errors
+      { regex: /(TypeError|ReferenceError|SyntaxError|RangeError):\s*(.+?)(?:\n|$)/g, type: 'error' }
+    ];
+    
+    for (const pattern of consolePatterns) {
+      let match;
+      while ((match = pattern.regex.exec(combinedOutput)) !== null) {
+        if (pattern.type === 'console') {
+          const [, level, message] = match;
+          logs.push({
+            level: level === 'warn' ? 'warning' : (level as 'error' | 'info' | 'debug'),
+            message: message.trim(),
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          logs.push({
+            level: pattern.type as 'error',
+            message: match[0].trim(),
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }
+    
+    return logs.length > 0 ? logs : undefined;
+  }
+
+  /**
+   * Extract network request logs from Playwright output
+   */
+  private extractNetworkLogs(stdout: string, stderr: string): Array<{
+    url: string;
+    method: string;
+    status: number;
+    timestamp: string;
+  }> | undefined {
+    const logs: Array<{
+      url: string;
+      method: string;
+      status: number;
+      timestamp: string;
+    }> = [];
+    
+    const combinedOutput = `${stdout}\n${stderr}`;
+    
+    // Enhanced network request patterns
+    const networkPatterns = [
+      // Standard HTTP requests with status codes
+      { regex: /(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(https?:\/\/[^\s]+)\s+(\d{3})/g, type: 'request' },
+      
+      // Failed requests with error codes
+      { regex: /(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(https?:\/\/[^\s]+)\s+net::ERR_(\w+)/g, type: 'error' },
+      
+      // Timeout requests
+      { regex: /(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+(https?:\/\/[^\s]+)\s+timeout/gi, type: 'timeout' },
+      
+      // CORS blocked requests
+      { regex: /Access to fetch at '(https?:\/\/[^']+)' from origin .+ has been blocked by CORS/g, type: 'cors' },
+      
+      // 404 and other HTTP error responses
+      { regex: /Failed to load resource: the server responded with a status of (\d{3}) .+ (https?:\/\/[^\s]+)/g, type: 'http_error' },
+      
+      // Network errors
+      { regex: /Failed to load resource:\s*(.+)/g, type: 'network_error' },
+      
+      // Request failed patterns
+      { regex: /Request failed|NetworkError|net::ERR_/g, type: 'general_error' }
+    ];
+    
+    for (const pattern of networkPatterns) {
+      let match;
+      while ((match = pattern.regex.exec(combinedOutput)) !== null) {
+        switch (pattern.type) {
+          case 'request':
+            const [, method, url, status] = match;
+            logs.push({
+              method,
+              url,
+              status: parseInt(status),
+              timestamp: new Date().toISOString()
+            });
+            break;
+            
+          case 'error':
+            const [, errorMethod, errorUrl, errorCode] = match;
+            logs.push({
+              method: errorMethod,
+              url: errorUrl,
+              status: 0,
+              timestamp: new Date().toISOString()
+            });
+            break;
+            
+          case 'timeout':
+            const [, timeoutMethod, timeoutUrl] = match;
+            logs.push({
+              method: timeoutMethod,
+              url: timeoutUrl,
+              status: 408, // Request Timeout
+              timestamp: new Date().toISOString()
+            });
+            break;
+            
+          case 'cors':
+            const [, corsUrl] = match;
+            logs.push({
+              method: 'UNKNOWN',
+              url: corsUrl,
+              status: 0, // CORS blocked
+              timestamp: new Date().toISOString()
+            });
+            break;
+            
+          case 'http_error':
+            const [, httpStatus, httpUrl] = match;
+            logs.push({
+              method: 'UNKNOWN',
+              url: httpUrl,
+              status: parseInt(httpStatus),
+              timestamp: new Date().toISOString()
+            });
+            break;
+            
+          default:
+            logs.push({
+              method: 'UNKNOWN',
+              url: 'Network error detected',
+              status: 0,
+              timestamp: new Date().toISOString()
+            });
+        }
+      }
+    }
+    
+    return logs.length > 0 ? logs : undefined;
+  }
+
+  constructor(config: { apiKey: string; reportsDir: string }) {
     // Clean up unused configs periodically
     setInterval(() => {
       this.cleanupUnusedConfigs();
@@ -61,6 +506,7 @@ export class TestSuiteManager {
     browserType: string;
     retries: number;
     timeout: number;
+    maxFailures?: number;
     features: {
       screenshots: boolean;
       video: boolean;
@@ -85,6 +531,7 @@ export class TestSuiteManager {
       browserType: config.browserType,
       retries: config.retries,
       timeout: config.timeout,
+      maxFailures: config.maxFailures || 1,
       features: config.features,
       headless: config.headless,
       createdAt: new Date(),
@@ -97,6 +544,13 @@ export class TestSuiteManager {
       config.browserType,
       config.timeout
     );
+    
+    // Validate the generated config
+    const isValidConfig = await validateConfig(suite.configPath);
+    if (!isValidConfig) {
+      await cleanupConfig(suite.configPath);
+      throw new Error(`Generated Playwright config is invalid for suite: ${config.name}`);
+    }
 
     this.testSuites.set(configHash, suite);
     
@@ -122,9 +576,20 @@ export class TestSuiteManager {
       // Validate test file exists
       await fs.access(path.resolve(process.cwd(), execution.testPath));
       
-      // Validate config file exists
-      if (!suite.configPath || !(await fs.access(suite.configPath).then(() => true).catch(() => false))) {
-        throw new Error(`Config file not found: ${suite.configPath}`);
+      // Validate config file exists and is readable
+      if (!suite.configPath) {
+        throw new Error(`No config path set for suite: ${suite.id}`);
+      }
+      
+      try {
+        await fs.access(suite.configPath);
+        const stats = await fs.stat(suite.configPath);
+        if (stats.size === 0) {
+          throw new Error(`Config file is empty: ${suite.configPath}`);
+        }
+      } catch (error) {
+        console.error(`[TestSuite] Config file validation failed:`, error);
+        throw new Error(`Config file not accessible: ${suite.configPath}`);
       }
 
       // Create results directory
@@ -145,10 +610,6 @@ export class TestSuiteManager {
       // suite.configPath is already an absolute path from createPlaywrightConfig
       const configPath = suite.configPath!;
       
-      console.log(`[TestSuite] Executing test with suite ${suite.name}`);
-      console.log(`[TestSuite] Test file path: ${testFilePath}`);
-      console.log(`[TestSuite] Relative path: ${relativePath}`);
-      console.log(`[TestSuite] Config path: ${configPath}`);
 
       // --- STREAMING EXECUTION ---------------------------------------------------
       // Build args array manually to avoid shell parsing issues with quotes
@@ -165,22 +626,32 @@ export class TestSuiteManager {
         args.push(`--retries=${suite.retries}`);
       }
       
-      if (suite.features.tracing) {
-        args.push('--trace=on-first-retry');
-      }
+      // Enhanced debugging options
+      args.push(`--max-failures=${suite.maxFailures}`); // User-configurable max failures
       
+      // Note: Output directory is configured in the Playwright config file
+            
       if (!suite.headless) {
         args.push('--headed');
       }
       
-      console.log(`[TestSuite] Args array:`, args);
+      console.log(`[TestSuite] Executing test: ${execution.testPath}`);
+      
       const child = require('child_process').spawn('npx', args, {
         cwd: process.cwd(),
         env: {
           ...process.env,
-          ...(suite.headless ? { CI: 'true' } : {})
+          ...(suite.headless ? { CI: 'true' } : {}),
+          // Ensure NODE_ENV is set for better error reporting
+          NODE_ENV: process.env.NODE_ENV || 'development'
         },
         stdio: ['ignore', 'pipe', 'pipe']
+      });
+      
+      // Handle spawn errors
+      child.on('error', (spawnError: Error) => {
+        console.error(`[TestSuite] Failed to spawn Playwright process:`, spawnError);
+        throw new Error(`Failed to start Playwright: ${spawnError.message}`);
       });
 
       let stdoutBuf = '';
@@ -208,7 +679,6 @@ export class TestSuiteManager {
       const stdout = stdoutBuf;
       const stderr = stderrBuf;
 
-      // Log only the essential information, not the full output
       console.log(`[TestSuite] Test completed with exit code: ${exitCode}`);
       
       // Simple success determination - if exit code is 0, test passed
@@ -222,31 +692,30 @@ export class TestSuiteManager {
       let suggestions: string | undefined;
       let reportId: string | undefined;
       
-      if (process.env.OPENROUTER_API_KEY) {
-        try {
-          const savedReport = await this.reportsService.saveReport({
-            timestamp: new Date().toISOString(),
-            testPath: execution.testPath,
-            testScript,
-            // Send raw data directly to AI - no parsing layers
-            rawPlaywrightOutput: stdout,
-            rawPlaywrightError: stderr,
-            exitCode: exitCode,
-            durationMs: duration,
-            status: success ? 'success' : 'failure'
-          });
-          
-          summary = savedReport.summary;
-          suggestions = savedReport.suggestions;
-          reportId = savedReport.id;
-          console.log(`[TestSuite] AI analysis completed and report saved: ${reportId}`);
-        } catch (aiError) {
-          console.error('[TestSuite] AI analysis failed:', aiError);
-          summary = success ? 'Test passed successfully' : 'Test failed. AI analysis unavailable - check detailed results for error information.';
-        }
-      } else {
-        summary = success ? 'Test passed successfully' : 'Test failed - no AI analysis available (API key not configured)';
+      // Save report using simplified service
+      try {
+        const savedReport = await testReportsService.saveReport({
+          testName: path.basename(execution.testPath, '.spec.ts'),
+          testPath: execution.testPath,
+          exitCode: exitCode,
+          duration: duration,
+          rawOutput: stdout,
+          rawError: stderr,
+          summary: success ? 'Test passed successfully' : 'Test failed - check details below',
+          suggestions: success ? undefined : 'Review the error details and screenshots for debugging information'
+        });
+        
+        summary = savedReport.summary;
+        suggestions = savedReport.suggestions;
+        reportId = savedReport.id;
+        console.log(`[TestSuite] Report saved: ${reportId}`);
+      } catch (reportError) {
+        console.error('[TestSuite] Failed to save report:', reportError);
+        summary = success ? 'Test passed successfully' : 'Test failed - report save failed';
       }
+
+      // Parse detailed error information
+      const detailedErrors = !success ? this.parsePlaywrightErrors(stdout, stderr) : undefined;
 
       return {
         success,
@@ -256,7 +725,11 @@ export class TestSuiteManager {
         summary,
         suggestions,
         reportId,
-        needsAIAnalysis: !success
+        needsAIAnalysis: !success,
+        // Enhanced debugging information
+        detailedErrors,
+        testPath: execution.testPath,
+        exitCode
       };
 
     } catch (error: any) {
