@@ -22,6 +22,28 @@ export interface TestFile {
   modifiedAt: string;
 }
 
+export interface TestExecutionConfig {
+  // Browser settings
+  browserType: 'chromium' | 'firefox' | 'webkit';
+  headless: boolean;
+  
+  // Execution settings
+  retries: number;
+  timeout: number;
+  maxFailures: number;
+  parallel: boolean;
+  workers: number;
+  
+  // Debugging features
+  screenshots: boolean;
+  videos: boolean;
+  tracing: boolean;
+  
+  // Output settings
+  outputDir: string;
+  reporters: string[];
+}
+
 interface TestState {
   // Test script state
   testScripts: string[];
@@ -39,6 +61,9 @@ interface TestState {
   // Test tabs
   tabs: TestTab[];
   
+  // Test execution configuration
+  executionConfig: TestExecutionConfig;
+  
   // Actions
   addTestScript: (script: string) => void;
   addGeneratedTest: (script: string) => void;
@@ -51,6 +76,8 @@ interface TestState {
   addTab: (tab: TestTab) => void;
   setTestFiles: (files: TestFile[]) => void;
   setIsLoadingFiles: (loading: boolean) => void;
+  updateExecutionConfig: (config: Partial<TestExecutionConfig>) => void;
+  resetExecutionConfig: () => void;
   
   // Complex actions
   generateTest: () => Promise<void>;
@@ -59,6 +86,89 @@ interface TestState {
   saveTest: () => Promise<void>;
   loadTestFiles: () => Promise<void>;
 }
+
+const defaultExecutionConfig: TestExecutionConfig = {
+  // Browser settings
+  browserType: 'chromium',
+  headless: true,
+  
+  // Execution settings
+  retries: 1,
+  timeout: 30000,
+  maxFailures: 1,
+  parallel: false,
+  workers: 1,
+  
+  // Debugging features
+  screenshots: true,
+  videos: true,
+  tracing: true,
+  
+  // Output settings
+  outputDir: 'test-results',
+  reporters: ['json', 'html']
+};
+
+// Configuration persistence helpers
+const EXECUTION_CONFIG_KEY = 'raiken-execution-config';
+
+const loadExecutionConfig = (): TestExecutionConfig => {
+  if (typeof window === 'undefined') return defaultExecutionConfig;
+  
+  try {
+    const saved = localStorage.getItem(EXECUTION_CONFIG_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      
+      // Validate the loaded configuration structure
+      if (parsed && typeof parsed === 'object') {
+        // Ensure all required properties exist and have correct types
+        const validatedConfig: TestExecutionConfig = {
+          browserType: ['chromium', 'firefox', 'webkit'].includes(parsed.browserType) 
+            ? parsed.browserType : defaultExecutionConfig.browserType,
+          headless: typeof parsed.headless === 'boolean' 
+            ? parsed.headless : defaultExecutionConfig.headless,
+          retries: typeof parsed.retries === 'number' && parsed.retries >= 0 
+            ? parsed.retries : defaultExecutionConfig.retries,
+          timeout: typeof parsed.timeout === 'number' && parsed.timeout >= 5000 
+            ? parsed.timeout : defaultExecutionConfig.timeout,
+          maxFailures: typeof parsed.maxFailures === 'number' && parsed.maxFailures >= 1 
+            ? parsed.maxFailures : defaultExecutionConfig.maxFailures,
+          parallel: typeof parsed.parallel === 'boolean' 
+            ? parsed.parallel : defaultExecutionConfig.parallel,
+          workers: typeof parsed.workers === 'number' && parsed.workers >= 1 
+            ? parsed.workers : defaultExecutionConfig.workers,
+          screenshots: typeof parsed.screenshots === 'boolean' 
+            ? parsed.screenshots : defaultExecutionConfig.screenshots,
+          videos: typeof parsed.videos === 'boolean' 
+            ? parsed.videos : defaultExecutionConfig.videos,
+          tracing: typeof parsed.tracing === 'boolean' 
+            ? parsed.tracing : defaultExecutionConfig.tracing,
+          outputDir: typeof parsed.outputDir === 'string' && parsed.outputDir.trim() 
+            ? parsed.outputDir : defaultExecutionConfig.outputDir,
+          reporters: Array.isArray(parsed.reporters) 
+            ? parsed.reporters : defaultExecutionConfig.reporters
+        };
+        
+        return validatedConfig;
+      }
+    }
+  } catch (error) {
+    console.warn('[Raiken] Failed to load execution config from localStorage:', error);
+  }
+  
+  return defaultExecutionConfig;
+};
+
+const saveExecutionConfig = (config: TestExecutionConfig) => {
+  if (typeof window === 'undefined') return;
+  
+  try {
+    localStorage.setItem(EXECUTION_CONFIG_KEY, JSON.stringify(config));
+  } catch (error) {
+    console.warn('[Raiken] Failed to save execution config to localStorage:', error);
+  }
+};
 
 export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   // Initial state
@@ -72,6 +182,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   testFiles: [],
   isLoadingFiles: false,
   tabs: [],
+  executionConfig: loadExecutionConfig(),
   
   // Simple actions
   addTestScript: (script) => set((state) => ({ testScripts: [...state.testScripts, script] })),
@@ -91,6 +202,17 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   setTestFiles: (files) => set({ testFiles: Array.isArray(files) ? files : [] }),
   setIsLoadingFiles: (loading) => set({ isLoadingFiles: loading }),
   
+  // Configuration actions
+  updateExecutionConfig: (config) => set((state) => {
+    const newConfig = { ...state.executionConfig, ...config };
+    saveExecutionConfig(newConfig);
+    return { executionConfig: newConfig };
+  }),
+  resetExecutionConfig: () => {
+    saveExecutionConfig(defaultExecutionConfig);
+    return set({ executionConfig: defaultExecutionConfig });
+  },
+  
   // Complex actions
   generateTest: async () => {
     const state = get();
@@ -104,16 +226,17 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       const domTree = projectState.domTree;
       const currentUrl = projectState.url;
 
-      console.log('[Raiken] Sending request to /api/generate-test endpoint with DOM context');
-      const response = await fetch('/api/generate-test', {
+      console.log('[Raiken] Sending request to /api/v1/tests endpoint with DOM context');
+      const response = await fetch('/api/v1/tests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'generate',
           prompt: state.jsonTestScript,
           domTree: domTree,
-          currentUrl: currentUrl
+          url: currentUrl
         }),
       });
 
@@ -123,7 +246,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       }
 
       const responseData = await response.json();
-      const generatedScript = responseData.script;
+      const generatedScript = responseData.testScript;
       state.addGeneratedTest(generatedScript);
 
       // Call the saveTest method to save and create a new tab
@@ -165,23 +288,69 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     state.setTestRunning(pathToExecute, true);
     
     try {
-      const configStore = useConfigurationStore.getState();
       const browserState = useBrowserStore.getState();
+      const { executionConfig } = state;
       
-      const response = await fetch('/api/execute-test', {
+      // Check if local bridge is available and use it for test execution
+      if (localBridge.isConnected()) {
+        console.log(`[TestStore] Executing test via local bridge: ${pathToExecute}`);
+        
+        const bridgeResult = await localBridge.executeTestRemotely(pathToExecute, {
+          browserType: executionConfig.browserType,
+          retries: executionConfig.retries,
+          timeout: executionConfig.timeout,
+          maxFailures: executionConfig.maxFailures,
+          parallel: executionConfig.parallel,
+          workers: executionConfig.workers,
+          features: {
+            screenshots: executionConfig.screenshots,
+            video: executionConfig.videos,
+            tracing: executionConfig.tracing
+          },
+          headless: executionConfig.headless,
+          outputDir: executionConfig.outputDir,
+          reporters: executionConfig.reporters
+        });
+        
+        if (bridgeResult.success) {
+          // Handle successful bridge execution
+          console.log(`[TestStore] Bridge execution completed successfully`);
+          state.setResults([{
+            testPath: pathToExecute,
+            success: true,
+            output: bridgeResult.output || 'Test completed via local bridge',
+            timestamp: new Date().toISOString()
+          }]);
+          return;
+        } else {
+          console.warn(`[TestStore] Bridge execution failed: ${bridgeResult.error}`);
+          // Fall back to direct execution
+        }
+      }
+      
+      console.log(`[TestStore] Executing test via Raiken API: ${pathToExecute}`);
+      const response = await fetch('/api/v1/tests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          action: 'execute',
           testPath: pathToExecute,
-          config: {
-            browserType: configStore.config.execution.browserType,
-            retries: configStore.config.execution.retries,
-            timeout: configStore.config.playwright.timeout,
-            features: configStore.config.playwright.features,
-            headless: configStore.config.execution.headless
-          }
+          browserType: executionConfig.browserType,
+          retries: executionConfig.retries,
+          timeout: executionConfig.timeout,
+          maxFailures: executionConfig.maxFailures,
+          parallel: executionConfig.parallel,
+          workers: executionConfig.workers,
+          features: {
+            screenshots: executionConfig.screenshots,
+            video: executionConfig.videos,
+            tracing: executionConfig.tracing
+          },
+          headless: executionConfig.headless,
+          outputDir: executionConfig.outputDir,
+          reporters: executionConfig.reporters
         }),
       });
 
@@ -190,7 +359,9 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
         throw new Error(error.error || 'Failed to execute test');
       }
 
-      const { results: testResults, success, resultFile, summary, needsAIAnalysis, suiteId } = await response.json();
+      const responseData = await response.json();
+      const { result } = responseData;
+      const { results: testResults, success, resultFile, summary, needsAIAnalysis } = result;
       state.setResults(testResults);
       // Refresh local cache of files after execution in case retries or artifacts changed
       state.loadTestFiles();
@@ -210,13 +381,11 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
           success,
           resultFile,
           summary,
-          needsAIAnalysis,
-          suiteId
+          needsAIAnalysis
         }}));
       }
 
       console.log(`[Raiken] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
-      console.log(`[Raiken] Used test suite: ${suiteId}`);
       console.log(`[Raiken] AI Analysis: ${needsAIAnalysis ? 'Generated for failed test' : 'Not needed for passed test'}`);
     } catch (error) {
       console.error('Test execution failed:', error);
@@ -252,13 +421,14 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       if (!localBridge.isConnected()) {
         // Fallback: Save via hosted server (existing behavior)
         console.log('[Raiken] 💾 Saving test via hosted server...');
-        const saveResponse = await fetch('/api/save-test', {
+        const saveResponse = await fetch('/api/v1/tests', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            name: testName,
+            action: 'save',
+            filename: testName,
             content: testContent
           }),
         });

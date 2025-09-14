@@ -83,4 +83,62 @@ export class LocalFileSystemAdapter {
     await fs.unlink(fullPath);
     console.log(`🗑️ Test deleted: ${testPath}`);
   }
+
+  async executeTest(testPath: string, config: any): Promise<{ success: boolean; output?: string; error?: string }> {
+    try {
+      const { spawn } = require('child_process');
+      
+      // Build Playwright command
+      const args = ['playwright', 'test', testPath];
+      
+      if (config.headless === false) {
+        args.push('--headed');
+      }
+      
+      if (config.browserType && config.browserType !== 'chromium') {
+        args.push(`--project=${config.browserType}`);
+      }
+
+      console.log(`Executing: npx ${args.join(' ')}`);
+      
+      return new Promise((resolve) => {
+        const child = spawn('npx', args, {
+          cwd: this.projectPath,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data: Buffer) => {
+          stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data: Buffer) => {
+          stderr += data.toString();
+        });
+
+        child.on('close', (code: number | null) => {
+          const success = code === 0;
+          resolve({
+            success,
+            output: stdout,
+            error: stderr
+          });
+        });
+
+        child.on('error', (error: Error) => {
+          resolve({
+            success: false,
+            error: error.message
+          });
+        });
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
 } 

@@ -141,6 +141,31 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     }
   });
 
+  // Test execution endpoint
+  app.post('/api/execute-test', async (req: Request, res: Response) => {
+    try {
+      const { testPath, config } = req.body;
+      
+      if (!testPath) {
+        return res.status(400).json({ error: 'testPath is required' });
+      }
+      
+      console.log(`${chalk.green('🧪 Executing test:')} ${testPath}`);
+      console.log(`${chalk.gray('   Config:')} ${JSON.stringify(config, null, 2)}`);
+      
+      // Execute test using the filesystem adapter
+      const result = await fsAdapter.executeTest(testPath, config);
+      
+      res.json(result);
+    } catch (error) {
+      console.error('Failed to execute test:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to execute test' 
+      });
+    }
+  });
+
   // Catch-all for unsupported endpoints
   app.use('*', (req: Request, res: Response) => {
     res.status(404).json({ error: 'Endpoint not found. This is a bridge server for local file operations.' });
