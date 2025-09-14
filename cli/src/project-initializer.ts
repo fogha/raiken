@@ -23,6 +23,9 @@ export async function initializeProject(projectPath: string, force: boolean = fa
   // 5. Create example test
   await createExampleTest(projectPath, projectInfo);
   
+  // 6. Install Playwright browsers
+  await installPlaywrightBrowsers(projectPath, projectInfo);
+  
   console.log(chalk.green('✓ Project initialization complete'));
 }
 
@@ -205,4 +208,43 @@ function getDevCommand(projectInfo: ProjectInfo): string {
   if (projectInfo.scripts.start) return 'npm run start';
   if (projectInfo.scripts.serve) return 'npm run serve';
   return 'npm run dev';
+}
+
+async function installPlaywrightBrowsers(projectPath: string, projectInfo: ProjectInfo): Promise<void> {
+  // Only install browsers if Playwright is already a dependency
+  if (!projectInfo.hasPlaywright) {
+    console.log(chalk.yellow('⚠ Playwright not detected as dependency, skipping browser installation'));
+    return;
+  }
+
+  console.log(chalk.blue('📦 Installing Playwright browsers...'));
+  
+  try {
+    const { spawn } = require('child_process');
+    
+    return new Promise<void>((resolve, reject) => {
+      const child = spawn('npx', ['playwright', 'install'], {
+        cwd: projectPath,
+        stdio: 'inherit' // Show output to user
+      });
+
+      child.on('close', (code: number) => {
+        if (code === 0) {
+          console.log(chalk.green('✓ Playwright browsers installed successfully'));
+          resolve();
+        } else {
+          console.log(chalk.yellow('⚠ Playwright browser installation failed, you may need to run "npx playwright install" manually'));
+          resolve(); // Don't fail the entire setup
+        }
+      });
+
+      child.on('error', (error: Error) => {
+        console.log(chalk.yellow(`⚠ Could not install Playwright browsers: ${error.message}`));
+        console.log(chalk.gray('  You can install them manually with: npx playwright install'));
+        resolve(); // Don't fail the entire setup
+      });
+    });
+  } catch (error) {
+    console.log(chalk.yellow('⚠ Could not install Playwright browsers, you may need to run "npx playwright install" manually'));
+  }
 } 

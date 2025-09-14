@@ -123,6 +123,57 @@ program
   });
 
 program
+  .command('install-browsers')
+  .description('Install Playwright browsers for this project')
+  .action(async () => {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(process.cwd(), 'raiken.config.json');
+    
+    if (!fs.existsSync(configPath)) {
+      console.log(chalk.red('❌ Project not initialized!'));
+      console.log(chalk.cyan('💡 Run "raiken init" first to set up the project'));
+      process.exit(1);
+    }
+    
+    const projectInfo = await detectProject(process.cwd());
+    
+    if (!projectInfo.hasPlaywright) {
+      console.log(chalk.red('❌ Playwright not detected as a dependency'));
+      console.log(chalk.cyan('💡 Install Playwright first: npm install -D @playwright/test'));
+      process.exit(1);
+    }
+    
+    console.log(chalk.blue('📦 Installing Playwright browsers...'));
+    
+    try {
+      const { spawn } = require('child_process');
+      
+      const child = spawn('npx', ['playwright', 'install'], {
+        cwd: process.cwd(),
+        stdio: 'inherit'
+      });
+
+      child.on('close', (code: number) => {
+        if (code === 0) {
+          console.log(chalk.green('✓ Playwright browsers installed successfully'));
+        } else {
+          console.log(chalk.red('❌ Playwright browser installation failed'));
+          process.exit(1);
+        }
+      });
+
+      child.on('error', (error: Error) => {
+        console.log(chalk.red(`❌ Error installing browsers: ${error.message}`));
+        process.exit(1);
+      });
+    } catch (error) {
+      console.log(chalk.red('❌ Could not install Playwright browsers'));
+      process.exit(1);
+    }
+  });
+
+program
   .command('info')
   .description('Show project information and configuration')
   .action(async () => {

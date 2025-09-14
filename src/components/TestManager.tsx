@@ -28,6 +28,7 @@ export function TestManager() {
     loadTestFiles();
   }, [loadTestFiles, isConnected]); // Refresh when bridge connection changes
 
+
   const handleRunTest = async (testPath: string) => {
     await runTest(testPath);
   };

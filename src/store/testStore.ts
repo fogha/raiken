@@ -538,7 +538,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
           console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from project`);
           state.setTestFiles(result.files);
         } else {
-          console.warn('[Raiken] ⚠️ Failed to load project files:', result.error);
+          console.warn('[Raiken] ⚠️ Failed to load project files:', result);
           // When bridge is connected but fails, show empty list (project-centric)
           state.setTestFiles([]);
         }
@@ -564,8 +564,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       }
       
       state.setTestFiles(files);
-      
-      console.log(`[Raiken] Loaded ${files.length} test files from folder`);
+      console.log(`[Raiken] ✅ Loaded ${files.length} test files from Raiken`);
     } catch (error) {
       console.error('Failed to load test files:', error);
     } finally {

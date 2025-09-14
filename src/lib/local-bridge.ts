@@ -131,8 +131,8 @@ class LocalBridgeService {
         }
       });
 
-      const files = await response.json();
-      return { success: true, files };
+      const data = await response.json();
+      return { success: true, files: data.files };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }

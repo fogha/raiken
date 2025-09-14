@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useBrowserStore } from '@/store/browserStore';
 import { useTestStore } from '@/store/testStore';
+import { useLocalBridge } from '@/hooks/useLocalBridge';
 import { TestScriptConfig, TestTab as TypesTestTab } from '@/types/test';
 import { TestScriptEditor } from './TestScriptEditor';
 import { Play, Save, Loader2, Plus, FileText, X } from 'lucide-react';
@@ -31,6 +32,7 @@ export function TabbedTestEditor() {
   } = useBrowserStore();
 
   const { runTest, runningTests } = useTestStore();
+  const { isConnected } = useLocalBridge();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
   // Get the active tab data - safely handle null case
@@ -105,10 +107,14 @@ export function TabbedTestEditor() {
     
     // Add tab ID to ensure uniqueness
     const uniqueFileName = `${safeFileName}_${tab.id}`;
-    const testPath = `generated-tests/${uniqueFileName}.spec.ts`;
+    
+    // Use project-centric path when bridge is connected
+    const testPath = isConnected 
+      ? `${uniqueFileName}.spec.ts`  // Just filename for bridge execution
+      : `generated-tests/${uniqueFileName}.spec.ts`; // Full path for Raiken execution
     
     console.log(`[Raiken] Running specific test: ${tab.name} (ID: ${tab.id})`);
-    console.log(`[Raiken] Test file path: ${testPath}`);
+    console.log(`[Raiken] Test file path: ${testPath} (bridge: ${isConnected ? 'connected' : 'disconnected'})`);
     await runTest(testPath);
   };
 
