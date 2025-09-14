@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useTestStore, type TestFile } from '@/store/testStore';
 import { useBrowserStore } from '@/store/browserStore';
-import { Loader2, Play, RefreshCw, Edit, Trash2, CheckCircle, XCircle } from 'lucide-react';
+import { useLocalBridge } from '@/hooks/useLocalBridge';
+import { Loader2, Play, RefreshCw, Edit, Trash2, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
 
 export function TestManager() {
   const {
@@ -20,11 +21,12 @@ export function TestManager() {
   } = useTestStore();
 
   const { addEditorTab } = useBrowserStore();
+  const { isConnected, connection } = useLocalBridge();
 
-  // Load test files on component mount
+  // Load test files on component mount and when bridge connection changes
   useEffect(() => {
     loadTestFiles();
-  }, [loadTestFiles]);
+  }, [loadTestFiles, isConnected]); // Refresh when bridge connection changes
 
   const handleRunTest = async (testPath: string) => {
     await runTest(testPath);
@@ -67,7 +69,27 @@ export function TestManager() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Test Manager</h2>
+        <div className="flex items-center gap-4">
+          <h2 className="text-2xl font-bold">Test Manager</h2>
+          {/* Bridge Status Indicator */}
+          <div className="flex items-center gap-2">
+            {isConnected ? (
+              <>
+                <Wifi className="h-4 w-4 text-green-500" />
+                <Badge variant="default" className="bg-green-100 text-green-800">
+                  Connected to {connection?.projectInfo?.name || 'Project'}
+                </Badge>
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4 text-gray-400" />
+                <Badge variant="secondary">
+                  No Bridge - Using Raiken Files
+                </Badge>
+              </>
+            )}
+          </div>
+        </div>
         <Button
           onClick={handleRefresh}
           disabled={isLoadingFiles}

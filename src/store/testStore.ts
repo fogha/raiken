@@ -529,23 +529,24 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     state.setIsLoadingFiles(true);
     
     try {
-      // Try to load via local CLI first, then fallback to server
+      // When bridge is connected, ONLY use project files - no fallback to Raiken
       if (localBridge.isConnected()) {
-        console.log('[Raiken] 📁 Loading tests via local CLI...');
+        console.log('[Raiken] 📁 Loading tests from project via local bridge...');
         const result = await localBridge.getLocalTestFiles();
         
         if (result.success && result.files && Array.isArray(result.files)) {
-          console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from local project`);
+          console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from project`);
           state.setTestFiles(result.files);
-          return;
         } else {
-          console.warn('[Raiken] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
-          // Continue to fallback below
+          console.warn('[Raiken] ⚠️ Failed to load project files:', result.error);
+          // When bridge is connected but fails, show empty list (project-centric)
+          state.setTestFiles([]);
         }
+        return;
       }
       
-      // Fallback: Load via hosted server (existing behavior)
-      console.log('[Raiken] 📁 Loading tests via hosted server...');
+      // Only when NO bridge: Load from Raiken's generated-tests
+      console.log('[Raiken] 📁 No bridge connected - loading from Raiken generated-tests...');
       const response = await fetch('/api/v1/tests?action=list');
       
       if (!response.ok) {
