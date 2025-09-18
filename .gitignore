@@ -46,10 +46,7 @@ next-env.d.ts
 # Generated test scripts and results
 /generated-tests/*.spec.ts
 /test-results/*.json
-/test-results/temp-execution/
-/test-results/*-chromium/
-/test-results/*-firefox/
-/test-results/*-webkit/
+/test-results/*
 
 # Keep examples for generated tests
 !/generated-tests/.gitkeep
@@ -57,6 +54,12 @@ next-env.d.ts
 # Temporary config files
 playwright.config.temp.ts
 *.temp.*
+/temp-configs/
+/test-results/ 
+/test-results/temp-execution/
+/test-results/*-chromium/
+/test-results/*-firefox/
+/test-results/*-webkit/
 
 # CLI build artifacts
 /cli/dist/

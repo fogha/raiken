@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import chalk from 'chalk';
 import detectPort from 'detect-port';
 import cors from 'cors';
+import path from 'path';
 import { ProjectInfo } from './project-detector';
 import { LocalFileSystemAdapter } from './filesystem-adapter';
 
@@ -61,10 +62,9 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     next();
   });
 
-  // Auth middleware (exclude health and project-info endpoints for discovery)
+  // Auth middleware (exclude health, project-info, and artifacts endpoints)
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
-    // Skip auth for discovery endpoints
-    if (req.path === '/health' || req.path === '/project-info') {
+    if (req.path === '/health' || req.path === '/project-info' || req.path.startsWith('/artifacts/')) {
       return next();
     }
     
@@ -163,6 +163,52 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to execute test' 
       });
+    }
+  });
+
+  // Reports endpoints
+  app.get('/api/reports', async (req: Request, res: Response) => {
+    try {
+      const reports = await fsAdapter.getReports();
+      res.json({ success: true, reports });
+    } catch (error) {
+      console.error('Failed to get reports:', error);
+      res.status(500).json({ error: 'Failed to get reports' });
+    }
+  });
+
+  app.delete('/api/reports/:reportId', async (req: Request, res: Response) => {
+    try {
+      const { reportId } = req.params;
+      await fsAdapter.deleteReport(reportId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Failed to delete report:', error);
+      res.status(500).json({ error: 'Failed to delete report' });
+    }
+  });
+
+  // Serve test artifacts (screenshots, videos, traces)
+  app.get('/api/artifacts/*', (req: Request, res: Response) => {
+    console.log(`[Artifacts] Request received: ${req.method} ${req.path} ${req.url}`);
+    try {
+      const artifactPath = req.params[0];
+      const fullPath = path.join(projectPath, 'test-results', artifactPath);
+      
+      // Security check - ensure path is within test-results
+      const resolvedPath = path.resolve(fullPath);
+      const testResultsPath = path.resolve(projectPath, 'test-results');
+      
+      if (!resolvedPath.startsWith(testResultsPath)) {
+        console.log(`[Artifacts] Access denied: ${resolvedPath} not in ${testResultsPath}`);
+        return res.status(403).json({ error: 'Access denied' });
+      }
+      
+      console.log(`[Artifacts] Serving: ${artifactPath} from ${fullPath}`);
+      res.sendFile(resolvedPath);
+    } catch (error) {
+      console.error('[Artifacts] Failed to serve artifact:', error);
+      res.status(404).json({ error: 'Artifact not found' });
     }
   });
 

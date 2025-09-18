@@ -11,19 +11,22 @@ export async function initializeProject(projectPath: string, force: boolean = fa
   // 1. Create test directory
   await createTestDirectory(projectPath, projectInfo);
   
-  // 2. Create Raiken configuration
+  // 2. Create test-results directory structure
+  await createTestResultsDirectory(projectPath);
+  
+  // 3. Create Raiken configuration
   await createRaikenConfig(projectPath, projectInfo, force);
   
-  // 3. Set up Playwright configuration
+  // 4. Set up Playwright configuration
   await setupPlaywrightConfig(projectPath, projectInfo, force);
   
-  // 4. Update package.json scripts
+  // 5. Update package.json scripts
   await updatePackageScripts(projectPath, projectInfo);
   
-  // 5. Create example test
+  // 6. Create example test
   await createExampleTest(projectPath, projectInfo);
   
-  // 6. Install Playwright browsers
+  // 7. Install Playwright browsers
   await installPlaywrightBrowsers(projectPath, projectInfo);
   
   console.log(chalk.green('✓ Project initialization complete'));
@@ -38,6 +41,40 @@ async function createTestDirectory(projectPath: string, projectInfo: ProjectInfo
   } catch {
     await fs.mkdir(testDirPath, { recursive: true });
     console.log(chalk.green(`✓ Created test directory: ${projectInfo.testDir}/`));
+  }
+}
+
+async function createTestResultsDirectory(projectPath: string): Promise<void> {
+  const testResultsPath = path.join(projectPath, 'test-results');
+  const reportsPath = path.join(testResultsPath, 'reports');
+  
+  try {
+    // Create test-results directory
+    await fs.mkdir(testResultsPath, { recursive: true });
+    
+    // Create reports subdirectory
+    await fs.mkdir(reportsPath, { recursive: true });
+    
+    // Create .gitignore to exclude test artifacts from version control
+    const gitignorePath = path.join(testResultsPath, '.gitignore');
+    const gitignoreContent = `# Test artifacts
+*
+!.gitignore
+!reports/
+reports/*.json
+`;
+    
+    try {
+      await fs.access(gitignorePath);
+      console.log(chalk.yellow('⚠ test-results/.gitignore already exists'));
+    } catch {
+      await fs.writeFile(gitignorePath, gitignoreContent);
+      console.log(chalk.green('✓ Created test-results/.gitignore'));
+    }
+    
+    console.log(chalk.green('✓ Created test-results/ directory structure'));
+  } catch (error) {
+    console.log(chalk.yellow('⚠ Could not create test-results directory structure'));
   }
 }
 
@@ -104,14 +141,15 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
+    // Additional browsers can be enabled by uncommenting:
+    // {
+    //   name: 'firefox',
+    //   use: { ...devices['Desktop Firefox'] },
+    // },
+    // {
+    //   name: 'webkit',
+    //   use: { ...devices['Desktop Safari'] },
+    // },
   ],
   webServer: {
     command: '${getDevCommand(projectInfo)}',

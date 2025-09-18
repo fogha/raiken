@@ -1,7 +1,6 @@
 import { DOMNode } from '@/types/dom';
 import { TestTab, TestScriptConfig } from '@/types/test';
 import { BrowserState, ViewportState } from '@/types/browser';
-import { StatusLevel } from '@/types/status';
 
 // DOM state types
 export interface DOMState {
@@ -58,7 +57,6 @@ export interface AppState {
   setViewport: (viewport: ViewportState) => void;
   setScale: (scale: number) => void;
   setIsMobile: (isMobile: boolean) => void;
-  setStatus: (type: string, message: string, level: StatusLevel) => void;
   
   // DOM actions
   setDOMTree: (domTree: DOMNode | null) => void;

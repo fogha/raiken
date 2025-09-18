@@ -11,12 +11,3 @@ export interface StatusState {
   level: 'info' | 'success' | 'warning' | 'error' | 'loading';
   timestamp: number;
 }
-
-export interface BrowserState {
-  url: string | null;
-  isLoading: boolean;
-  isLaunched: boolean;
-  viewport: ViewportState;
-  error: string | null;
-  status: StatusState | null;
-} 

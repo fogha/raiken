@@ -1,53 +1,4 @@
 import { createSlice } from './createSlice';
-import { StatusType } from '@/types/status';
-export type { StatusType };
-
-export type SystemAction = 
-  // Browser actions
-  | 'BROWSER_INITIALIZING'
-  | 'BROWSER_READY'
-  | 'BROWSER_CLOSED'
-  | 'BROWSER_ERROR'
-  | 'BROWSER_CLOSING'
-  // Navigation actions
-  | 'NAVIGATING'
-  | 'NAVIGATION_COMPLETE'
-  | 'NAVIGATION_ERROR'
-  | 'NAVIGATION_SUCCESS'
-  // DOM actions
-  | 'DOM_EXTRACTING'
-  | 'DOM_READY'
-  | 'DOM_ERROR'
-  | 'DOM_UPDATED'
-  | 'EXTRACTING_DOM'
-  | 'ELEMENT_SELECTED'
-  // Screenshot actions
-  | 'TAKING_SCREENSHOT'
-  | 'SCREENSHOT_TAKEN'
-  | 'SCREENSHOT_ERROR'
-  // View actions
-  | 'REFRESHING_VIEW'
-  | 'VIEW_REFRESHED'
-  | 'REFRESH_ERROR'
-  // Test actions
-  | 'GENERATING_TEST'
-  | 'TEST_GENERATED'
-  | 'RUNNING_TEST'
-  | 'TEST_ERROR'
-  | 'TEST_PASSED'
-  | 'TEST_FAILED'
-  // CLI Bridge actions
-  | 'DETECTING_CLI'
-  | 'CLI_CONNECTED'
-  | 'CLI_DISCONNECTED'
-  | 'IDLE';
-
-interface SystemStatus {
-  action: SystemAction;
-  message: string;
-  type: StatusType;
-  timestamp: number;
-}
 
 interface TestTab {
   id: string;
@@ -68,26 +19,6 @@ interface BrowserState {
   isLoading: boolean;
   isLaunched: boolean;
   
-  // Visual state
-  screenshot: string | null;
-  pageInfo: {
-    url: string;
-    title: string;
-    viewport: { width: number; height: number } | null;
-  } | null;
-  
-  // Viewport state
-  viewport: { width: number; height: number };
-  deviceScaleFactor: number;
-  isMobile: boolean;
-  
-  // Status and messaging
-  status: {
-    action: SystemAction;
-    message: string;
-    type: StatusType;
-  };
-  
   // Editor state
   editorTabs: TestTab[];
   activeTabId: string | null;
@@ -96,13 +27,6 @@ interface BrowserState {
   setUrl: (url: string | null) => void;
   setLoading: (loading: boolean) => void;
   setLaunched: (launched: boolean) => void;
-  setScreenshot: (screenshot: string | null) => void;
-  setPageInfo: (pageInfo: BrowserState['pageInfo']) => void;
-  setViewport: (width: number, height: number) => void;
-  setDeviceScaleFactor: (scale: number) => void;
-  setMobile: (isMobile: boolean) => void;
-  setStatus: (action: SystemAction, message: string, type?: StatusType) => void;
-  clearStatus: () => void;
   
   // Editor actions
   addEditorTab: (tab: TestTab) => void;
@@ -111,81 +35,42 @@ interface BrowserState {
   setActiveTab: (id: string) => void;
 }
 
-const initialState = {
-  url: '',
-  isLoading: false,
-  isLaunched: false,
-  editorTabs: [],
-  activeTabId: null,
-  viewport: {
-    width: 1280,
-    height: 720
-  },
-  deviceScaleFactor: 1,
-  isMobile: false,
-  status: {
-    action: 'IDLE' as SystemAction,
-    message: '',
-    type: 'idle' as StatusType,
-    timestamp: Date.now()
-  }
-};
-
 export const useBrowserStore = createSlice<BrowserState>('browser', (set, get) => ({
   // Initial state
   url: null,
   isLoading: false,
   isLaunched: false,
-  screenshot: null,
-  pageInfo: null,
-  
-  // Viewport state
-  viewport: { width: 1920, height: 1080 },
-  deviceScaleFactor: 1,
-  isMobile: false,
-  
-  // Status
-  status: {
-    action: 'IDLE' as SystemAction,
-    message: '',
-    type: 'idle' as StatusType
-  },
-  
-  // Editor state
   editorTabs: [],
   activeTabId: null,
-
+  
   // Actions
   setUrl: (url) => set({ url }),
   setLoading: (isLoading) => set({ isLoading }),
   setLaunched: (isLaunched) => set({ isLaunched }),
-  setScreenshot: (screenshot) => set({ screenshot }),
-  setPageInfo: (pageInfo) => set({ pageInfo }),
-  setViewport: (width, height) => set({ viewport: { width, height } }),
-  setDeviceScaleFactor: (deviceScaleFactor) => set({ deviceScaleFactor }),
-  setMobile: (isMobile) => set({ isMobile }),
-  setStatus: (action, message, type = 'info') => set({ 
-    status: { action, message, type } 
-  }),
-  clearStatus: () => set({ 
-    status: { action: 'IDLE' as SystemAction, message: '', type: 'idle' as StatusType } 
-  }),
-
+  
   // Editor actions
-  addEditorTab: (tab) => set((state) => ({ 
+  addEditorTab: (tab) => set((state) => ({
     editorTabs: [...state.editorTabs, tab],
     activeTabId: tab.id
   })),
+  
   updateEditorTab: (id, updates) => set((state) => ({
     editorTabs: state.editorTabs.map(tab => 
       tab.id === id ? { ...tab, ...updates } : tab
     )
   })),
-  removeEditorTab: (id) => set((state) => ({
-    editorTabs: state.editorTabs.filter(tab => tab.id !== id),
-    activeTabId: state.activeTabId === id ? 
-      (state.editorTabs.length > 1 ? state.editorTabs[0].id : null) : 
-      state.activeTabId
-  })),
+  
+  removeEditorTab: (id) => set((state) => {
+    const newTabs = state.editorTabs.filter(tab => tab.id !== id);
+    const newActiveId = state.activeTabId === id 
+      ? (newTabs.length > 0 ? newTabs[0].id : null)
+      : state.activeTabId;
+    
+    return {
+      editorTabs: newTabs,
+      activeTabId: newActiveId
+    };
+  }),
+  
   setActiveTab: (id) => set({ activeTabId: id })
-})); 
+}));

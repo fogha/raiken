@@ -11,6 +11,12 @@ const nextConfig = {
         net: false,
         tls: false,
       };
+
+      // Monaco Editor webpack configuration
+      config.module.rules.push({
+        test: /\.ttf$/,
+        type: 'asset/resource',
+      });
     }
     return config;
   },

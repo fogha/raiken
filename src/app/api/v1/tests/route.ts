@@ -317,8 +317,24 @@ function extractTestNameFromPath(testPath: string): string {
 
 async function handleGetReports(params: any) {
   try {
-    const { testReportsService } = await import('@/core/testing/services/reports.service');
-    const reports = await testReportsService.getReports();
+    let reports = [];
+    
+    // Check if we should use local bridge
+    if (localBridge.isConnected()) {
+      console.log('[Raiken] 📊 Loading reports via local CLI...');
+      const bridgeResult = await localBridge.getLocalReports();
+      if (bridgeResult.success && bridgeResult.reports) {
+        reports = bridgeResult.reports;
+        console.log(`[Raiken] ✅ Loaded ${reports.length} reports from local project`);
+      } else {
+        console.warn('[Raiken] ⚠️ Local CLI reports load failed:', bridgeResult.error);
+      }
+    } else {
+      // Fallback to Raiken's reports
+      const { testReportsService } = await import('@/core/testing/services/reports.service');
+      reports = await testReportsService.getReports();
+      console.log(`[Raiken] 📊 Loaded ${reports.length} reports from Raiken server`);
+    }
     
     return NextResponse.json({
       success: true,
@@ -344,16 +360,34 @@ async function handleDeleteReport(params: any) {
   }
 
   try {
-    const { testReportsService } = await import('@/core/testing/services/reports.service');
-    const success = await testReportsService.deleteReport(id);
-    
-    if (success) {
-      return NextResponse.json({ success: true });
+    // Check if we should use local bridge
+    if (localBridge.isConnected()) {
+      console.log(`[Raiken] 🗑️ Deleting report via local CLI: ${id}`);
+      const bridgeResult = await localBridge.deleteLocalReport(id);
+      if (bridgeResult.success) {
+        console.log(`[Raiken] ✅ Report deleted from local project: ${id}`);
+        return NextResponse.json({ success: true });
+      } else {
+        console.warn('[Raiken] ⚠️ Local CLI report deletion failed:', bridgeResult.error);
+        return NextResponse.json(
+          { success: false, error: bridgeResult.error || 'Failed to delete report' },
+          { status: 500 }
+        );
+      }
     } else {
-      return NextResponse.json(
-        { success: false, error: 'Report not found or cannot be deleted' },
-        { status: 404 }
-      );
+      // Fallback to Raiken's reports
+      const { testReportsService } = await import('@/core/testing/services/reports.service');
+      const success = await testReportsService.deleteReport(id);
+      
+      if (success) {
+        console.log(`[Raiken] 🗑️ Report deleted from Raiken server: ${id}`);
+        return NextResponse.json({ success: true });
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'Report not found or cannot be deleted' },
+          { status: 404 }
+        );
+      }
     }
   } catch (error: any) {
     return NextResponse.json(

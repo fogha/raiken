@@ -1,11 +1,6 @@
-/**
- * Zustand Store Types
- */
-
-import { SystemAction, StatusType } from './status';
 import { DOMNode } from './dom';
-import { TestTab, TestFile, TestExecutionResult } from './test';
-import { BrowserConfig } from './config';
+import { TestTab, TestGenerationResult } from './test';
+import { TestConfig } from './config';
 
 // Browser Store Types
 export interface BrowserState {
@@ -27,12 +22,6 @@ export interface BrowserState {
   deviceScaleFactor: number;
   isMobile: boolean;
   
-  // Status
-  status: {
-    action: SystemAction;
-    message: string;
-    type: StatusType;
-  };
   
   // Editor state
   editorTabs: TestTab[];
@@ -47,8 +36,6 @@ export interface BrowserState {
   setViewport: (width: number, height: number) => void;
   setDeviceScaleFactor: (scale: number) => void;
   setMobile: (isMobile: boolean) => void;
-  setStatus: (action: SystemAction, message: string, type?: StatusType) => void;
-  clearStatus: () => void;
   
   // Editor actions
   addEditorTab: (tab: TestTab) => void;
@@ -77,23 +64,23 @@ export interface TestState {
   isGenerating: boolean;
   generatedTests: string[];
   generationError: string | null;
-  testResults: Map<string, TestExecutionResult>;
+  testResults: Map<string, TestGenerationResult>;
   
   // Test management
-  testFiles: TestFile[];
+  testFiles: any[];
   currentTest: string | null;
   
   // Actions
   setIsGenerating: (isGenerating: boolean) => void;
   addGeneratedTest: (test: string) => void;
   setGenerationError: (error: string | null) => void;
-  setTestResults: (tabId: string, result: TestExecutionResult) => void;
-  setTestFiles: (files: TestFile[]) => void;
+  setTestResults: (tabId: string, result: TestGenerationResult) => void;
+  setTestFiles: (files: any[]) => void;
   setCurrentTest: (test: string | null) => void;
   
   // Async actions
   generateTest: (prompt: string) => Promise<void>;
-  executeTest: (test: string, suiteId?: string) => Promise<TestExecutionResult>;
+  executeTest: (test: string, suiteId?: string) => Promise<TestGenerationResult>;
   saveTest: () => Promise<void>;
   deleteTest: (testPath: string) => Promise<void>;
   loadTestFiles: () => Promise<void>;
@@ -101,10 +88,10 @@ export interface TestState {
 
 // Configuration Store Types
 export interface ConfigurationState {
-  config: BrowserConfig;
+  config: TestConfig;
   
   // Actions
-  updateConfig: (updates: Partial<BrowserConfig>) => void;
+  updateConfig: (updates: Partial<TestConfig>) => void;
   reset: () => void;
 }
 

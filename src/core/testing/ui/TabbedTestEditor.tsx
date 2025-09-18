@@ -31,15 +31,12 @@ export function TabbedTestEditor() {
     setActiveTab,
   } = useBrowserStore();
 
-  const { runTest, runningTests } = useTestStore();
-  const { isConnected } = useLocalBridge();
+  const { runTest, isTestRunning, loadTestFiles } = useTestStore();
+  const { isConnected, saveTest } = useLocalBridge();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
   // Get the active tab data - safely handle null case
   const activeTab = activeTabId ? editorTabs.find(tab => tab.id === activeTabId) : null;
-  
-  // Check if any test is currently running
-  const isRunning = Object.values(runningTests).some(running => running);
 
   // Handle tab operations
   const handleAddTab = () => {
@@ -62,6 +59,23 @@ export function TabbedTestEditor() {
     setSavingTabs(prev => new Set(prev).add(tab.id));
     
     try {
+      // Try local bridge first if connected
+      if (isConnected) {
+        console.log('💾 Saving test via local bridge...');
+        const result = await saveTest(tab.content, tab.name);
+
+        if (result.success) {
+          console.log('✅ Test saved successfully to:', result.path);
+          // Refresh test files to show the new file
+          await loadTestFiles();
+          return;
+        } else {
+          console.warn('⚠️ Local bridge save failed, falling back to Raiken API:', result.error);
+        }
+      }
+      
+      // Fallback to Raiken API
+      console.log('💾 Saving test via Raiken API...');
       const response = await fetch('/api/v1/tests', {
         method: 'POST',
         headers: {
@@ -93,25 +107,26 @@ export function TabbedTestEditor() {
     }
   };
 
+  // Helper function to get test path for a tab
+  const getTestPath = (tab: TestTab): string => {
+    // Preserve the original test name, just sanitize for filesystem
+    const safeFileName = tab.name
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '');
+    
+    return isConnected 
+      ? `${safeFileName}.spec.ts`  // Use original name without tab ID
+      : `generated-tests/${safeFileName}.spec.ts`; // Full path for Raiken execution
+  };
+
   // Handle running a test
   const handleRunTest = async (tab: TestTab) => {
     // First save the test, then run it
     await handleSaveTest(tab);
     
-    // Create a safe filename for the test path with tab ID to ensure uniqueness
-    const safeFileName = tab.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, '_')
-      .replace(/_+/g, '_')
-      .replace(/^_|_$/g, '');
-    
-    // Add tab ID to ensure uniqueness
-    const uniqueFileName = `${safeFileName}_${tab.id}`;
-    
-    // Use project-centric path when bridge is connected
-    const testPath = isConnected 
-      ? `${uniqueFileName}.spec.ts`  // Just filename for bridge execution
-      : `generated-tests/${uniqueFileName}.spec.ts`; // Full path for Raiken execution
+    const testPath = getTestPath(tab);
     
     console.log(`[Raiken] Running specific test: ${tab.name} (ID: ${tab.id})`);
     console.log(`[Raiken] Test file path: ${testPath} (bridge: ${isConnected ? 'connected' : 'disconnected'})`);
@@ -231,10 +246,10 @@ export function TabbedTestEditor() {
         </Button>
         <Button
           onClick={() => activeTab && handleRunTest(activeTab)}
-          disabled={!activeTab || isRunning || (activeTab && savingTabs.has(activeTab.id))}
+          disabled={!activeTab || (activeTab && (savingTabs.has(activeTab.id) || isTestRunning(getTestPath(activeTab))))}
           size="sm"
         >
-          {isRunning ? (
+          {activeTab && isTestRunning(getTestPath(activeTab)) ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             <Play className="h-4 w-4 mr-2" />

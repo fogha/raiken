@@ -1,18 +1,8 @@
 import { createSlice } from './createSlice';
 import { useBrowserStore } from './browserStore';
-import { useConfigurationStore } from './configurationStore';
 import { localBridge } from '@/lib/local-bridge';
 
-interface TestTab {
-  id: string;
-  name: string;
-  content: string;
-  language: string;
-  config: {
-    headless: boolean;
-    browserType: string;
-  };
-}
+const BRIDGE_TIMEOUT_MS = parseInt(process.env.RAIKEN_BRIDGE_TIMEOUT_MS || '300000'); // 5 minutes default
 
 export interface TestFile {
   name: string;
@@ -26,45 +16,36 @@ export interface TestExecutionConfig {
   // Browser settings
   browserType: 'chromium' | 'firefox' | 'webkit';
   headless: boolean;
-  
+
   // Execution settings
   retries: number;
   timeout: number;
   maxFailures: number;
   parallel: boolean;
   workers: number;
-  
+
   // Debugging features
   screenshots: boolean;
   videos: boolean;
   tracing: boolean;
-  
+
   // Output settings
   outputDir: string;
   reporters: string[];
 }
 
 interface TestState {
-  // Test script state
   testScripts: string[];
   generatedTests: string[];
   jsonTestScript: string;
   isGenerating: boolean;
-  runningTests: Record<string, boolean>; // Track which tests are currently running
+  runningTests: Record<string, boolean>;
   results: any[];
   generationError: string | null;
-  
-  // Test files from folder
   testFiles: TestFile[];
   isLoadingFiles: boolean;
-  
-  // Test tabs
-  tabs: TestTab[];
-  
-  // Test execution configuration
   executionConfig: TestExecutionConfig;
-  
-  // Actions
+
   addTestScript: (script: string) => void;
   addGeneratedTest: (script: string) => void;
   setJsonTestScript: (script: string) => void;
@@ -73,13 +54,11 @@ interface TestState {
   isTestRunning: (testPath: string) => boolean;
   setResults: (results: any[]) => void;
   setGenerationError: (error: string | null) => void;
-  addTab: (tab: TestTab) => void;
   setTestFiles: (files: TestFile[]) => void;
   setIsLoadingFiles: (loading: boolean) => void;
   updateExecutionConfig: (config: Partial<TestExecutionConfig>) => void;
   resetExecutionConfig: () => void;
-  
-  // Complex actions
+
   generateTest: () => Promise<void>;
   runTest: (testPath?: string) => Promise<void>;
   deleteTestFile: (testPath: string) => Promise<void>;
@@ -88,90 +67,38 @@ interface TestState {
 }
 
 const defaultExecutionConfig: TestExecutionConfig = {
-  // Browser settings
   browserType: 'chromium',
   headless: true,
-  
-  // Execution settings
   retries: 1,
   timeout: 30000,
   maxFailures: 1,
   parallel: false,
   workers: 1,
-  
-  // Debugging features
   screenshots: true,
   videos: true,
   tracing: true,
-  
-  // Output settings
   outputDir: 'test-results',
   reporters: ['json', 'html']
 };
 
-// Configuration persistence helpers
-const EXECUTION_CONFIG_KEY = 'raiken-execution-config';
-
 const loadExecutionConfig = (): TestExecutionConfig => {
   if (typeof window === 'undefined') return defaultExecutionConfig;
-  
   try {
-    const saved = localStorage.getItem(EXECUTION_CONFIG_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      
-      // Validate the loaded configuration structure
-      if (parsed && typeof parsed === 'object') {
-        // Ensure all required properties exist and have correct types
-        const validatedConfig: TestExecutionConfig = {
-          browserType: ['chromium', 'firefox', 'webkit'].includes(parsed.browserType) 
-            ? parsed.browserType : defaultExecutionConfig.browserType,
-          headless: typeof parsed.headless === 'boolean' 
-            ? parsed.headless : defaultExecutionConfig.headless,
-          retries: typeof parsed.retries === 'number' && parsed.retries >= 0 
-            ? parsed.retries : defaultExecutionConfig.retries,
-          timeout: typeof parsed.timeout === 'number' && parsed.timeout >= 5000 
-            ? parsed.timeout : defaultExecutionConfig.timeout,
-          maxFailures: typeof parsed.maxFailures === 'number' && parsed.maxFailures >= 1 
-            ? parsed.maxFailures : defaultExecutionConfig.maxFailures,
-          parallel: typeof parsed.parallel === 'boolean' 
-            ? parsed.parallel : defaultExecutionConfig.parallel,
-          workers: typeof parsed.workers === 'number' && parsed.workers >= 1 
-            ? parsed.workers : defaultExecutionConfig.workers,
-          screenshots: typeof parsed.screenshots === 'boolean' 
-            ? parsed.screenshots : defaultExecutionConfig.screenshots,
-          videos: typeof parsed.videos === 'boolean' 
-            ? parsed.videos : defaultExecutionConfig.videos,
-          tracing: typeof parsed.tracing === 'boolean' 
-            ? parsed.tracing : defaultExecutionConfig.tracing,
-          outputDir: typeof parsed.outputDir === 'string' && parsed.outputDir.trim() 
-            ? parsed.outputDir : defaultExecutionConfig.outputDir,
-          reporters: Array.isArray(parsed.reporters) 
-            ? parsed.reporters : defaultExecutionConfig.reporters
-        };
-        
-        return validatedConfig;
-      }
-    }
-  } catch (error) {
-    console.warn('[Raiken] Failed to load execution config from localStorage:', error);
+    const saved = localStorage.getItem('raiken-execution-config');
+    return saved ? { ...defaultExecutionConfig, ...JSON.parse(saved) } : defaultExecutionConfig;
+  } catch {
+    return defaultExecutionConfig;
   }
-  
-  return defaultExecutionConfig;
 };
 
 const saveExecutionConfig = (config: TestExecutionConfig) => {
   if (typeof window === 'undefined') return;
-  
   try {
-    localStorage.setItem(EXECUTION_CONFIG_KEY, JSON.stringify(config));
-  } catch (error) {
-    console.warn('[Raiken] Failed to save execution config to localStorage:', error);
-  }
+    localStorage.setItem('raiken-execution-config', JSON.stringify(config));
+  } catch {}
 };
 
 export const useTestStore = createSlice<TestState>('test', (set, get) => ({
-  // Initial state
   testScripts: [],
   generatedTests: [],
   jsonTestScript: '',
@@ -181,28 +108,20 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   generationError: null,
   testFiles: [],
   isLoadingFiles: false,
-  tabs: [],
   executionConfig: loadExecutionConfig(),
-  
-  // Simple actions
   addTestScript: (script) => set((state) => ({ testScripts: [...state.testScripts, script] })),
   addGeneratedTest: (script) => set((state) => ({ generatedTests: [...state.generatedTests, script] })),
   setJsonTestScript: (script) => set({ jsonTestScript: script }),
   setIsGenerating: (isGenerating) => set({ isGenerating }),
   setTestRunning: (testPath, isRunning) => set((state) => ({
-    runningTests: {
-      ...state.runningTests,
-      [testPath]: isRunning
-    }
+    runningTests: { ...state.runningTests, [testPath]: isRunning }
   })),
   isTestRunning: (testPath) => Boolean(get().runningTests[testPath]),
   setResults: (results) => set({ results }),
   setGenerationError: (error) => set({ generationError: error }),
-  addTab: (tab) => set((state) => ({ tabs: [...state.tabs, tab] })),
   setTestFiles: (files) => set({ testFiles: Array.isArray(files) ? files : [] }),
   setIsLoadingFiles: (loading) => set({ isLoadingFiles: loading }),
-  
-  // Configuration actions
+
   updateExecutionConfig: (config) => set((state) => {
     const newConfig = { ...state.executionConfig, ...config };
     saveExecutionConfig(newConfig);
@@ -212,8 +131,7 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     saveExecutionConfig(defaultExecutionConfig);
     return set({ executionConfig: defaultExecutionConfig });
   },
-  
-  // Complex actions
+
   generateTest: async () => {
     const state = get();
     state.setIsGenerating(true);
@@ -259,9 +177,10 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
       state.setIsGenerating(false);
     }
   },
-  
+
   runTest: async (testPath?: string) => {
     const state = get();
+
     // Determine path to execute:
     // 1) explicit param
     // 2) most recently saved file from server response cached in testFiles
@@ -285,18 +204,39 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
         }
       }
     }
-    
+
+    // Helper function to set test results and status
+    const setTestResult = (success: boolean, output: string, statusMessage: string) => {
+      state.setResults([{
+        testPath: pathToExecute,
+        success,
+        output,
+        timestamp: new Date().toISOString()
+      }]);
+    };
+
     state.setTestRunning(pathToExecute, true);
-    
+
     try {
-      const browserState = useBrowserStore.getState();
       const { executionConfig } = state;
-      
-      // Check if local bridge is available and use it for test execution
-      if (localBridge.isConnected()) {
-        console.log(`[TestStore] Executing test via local bridge: ${pathToExecute}`);
-        
-        const bridgeResult = await localBridge.executeTestRemotely(pathToExecute, {
+
+      // Project-focused: Only execute tests in connected project
+      if (!localBridge.isConnected()) {
+        throw new Error('No project connected. Run "raiken remote" in your project directory to execute tests.');
+      }
+
+      console.log(`[TestStore] Executing test in project: ${pathToExecute}`);
+
+      try {
+        // Create timeout promise with configurable duration
+        let timeoutId: NodeJS.Timeout;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error(`Test execution timeout (${BRIDGE_TIMEOUT_MS / 1000}s)`));
+          }, BRIDGE_TIMEOUT_MS);
+        });
+
+        const bridgeExecutionPromise = localBridge.executeTestRemotely(pathToExecute, {
           browserType: executionConfig.browserType,
           retries: executionConfig.retries,
           timeout: executionConfig.timeout,
@@ -312,84 +252,37 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
           outputDir: executionConfig.outputDir,
           reporters: executionConfig.reporters
         });
-        
-        if (bridgeResult.success) {
-          // Handle successful bridge execution
-          console.log(`[TestStore] Bridge execution completed successfully`);
-          state.setResults([{
-            testPath: pathToExecute,
-            success: true,
-            output: bridgeResult.output || 'Test completed via local bridge',
-            timestamp: new Date().toISOString()
-          }]);
-          return;
-        } else {
-          console.warn(`[TestStore] Bridge execution failed: ${bridgeResult.error}`);
-          // Fall back to direct execution
+
+        const bridgeResult = await Promise.race([bridgeExecutionPromise, timeoutPromise]);
+
+        // Clear timeout if execution completed
+        clearTimeout(timeoutId!);
+
+        // Validate bridge result structure
+        if (!bridgeResult || typeof bridgeResult !== 'object') {
+          throw new Error('Invalid project response');
         }
+
+        if (bridgeResult.success) {
+          console.log(`[TestStore] Test execution completed successfully`);
+          setTestResult(true, bridgeResult.output || 'Test completed in project', 'Test passed successfully');
+        } else {
+          console.warn(`[TestStore] Test execution failed: ${bridgeResult.error}`);
+          setTestResult(false, bridgeResult.error || 'Test execution failed', `Test execution failed: ${bridgeResult.error || 'Unknown error'}`);
+        }
+
+        // Refresh test files from project
+        await state.loadTestFiles();
+
+      } catch (bridgeError) {
+        console.error(`[TestStore] Test execution error:`, bridgeError);
+        const errorMessage = bridgeError instanceof Error ? bridgeError.message : 'Unknown error';
+        setTestResult(false, `Test execution error: ${errorMessage}`, `Test execution error: ${errorMessage}`);
       }
-      
-      console.log(`[TestStore] Executing test via Raiken API: ${pathToExecute}`);
-      const response = await fetch('/api/v1/tests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          action: 'execute',
-          testPath: pathToExecute,
-          browserType: executionConfig.browserType,
-          retries: executionConfig.retries,
-          timeout: executionConfig.timeout,
-          maxFailures: executionConfig.maxFailures,
-          parallel: executionConfig.parallel,
-          workers: executionConfig.workers,
-          features: {
-            screenshots: executionConfig.screenshots,
-            video: executionConfig.videos,
-            tracing: executionConfig.tracing
-          },
-          headless: executionConfig.headless,
-          outputDir: executionConfig.outputDir,
-          reporters: executionConfig.reporters
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to execute test');
-      }
-
-      const responseData = await response.json();
-      const { result } = responseData;
-      const { results: testResults, success, resultFile, summary, needsAIAnalysis } = result;
-      state.setResults(testResults);
-      // Refresh local cache of files after execution in case retries or artifacts changed
-      state.loadTestFiles();
-
-      // Update browser status for toast notifications
-      const browserStore = useBrowserStore.getState();
-      if (success) {
-        browserStore.setStatus('TEST_PASSED', 'Test passed successfully', 'success');
-      } else {
-        const failMsg = summary || (testResults?.error || 'Test failed');
-        browserStore.setStatus('TEST_FAILED', failMsg, 'error');
-      }
-
-      // Dispatch custom event for TestReports component to refresh
-      if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('test-execution-complete', { detail: {
-          success,
-          resultFile,
-          summary,
-          needsAIAnalysis
-        }}));
-      }
-
-      console.log(`[Raiken] Test execution ${success ? 'completed' : 'failed'}. Results saved to: ${resultFile}`);
-      console.log(`[Raiken] AI Analysis: ${needsAIAnalysis ? 'Generated for failed test' : 'Not needed for passed test'}`);
     } catch (error) {
       console.error('Test execution failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setTestResult(false, `Execution failed: ${errorMessage}`, `Test execution failed: ${errorMessage}`);
     } finally {
       state.setTestRunning(pathToExecute, false);
     }
@@ -399,53 +292,28 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
     const state = get();
     try {
       const testSpec = JSON.parse(state.jsonTestScript);
-      
-      // Use the test name from the JSON without adding timestamp
-      // Timestamp will only be added for completely new tests via TestBuilder
+
+      // Always use the exact test name from the JSON specification
       const testName = testSpec.name || 'Generated Test';
       const testContent = state.generatedTests[state.generatedTests.length - 1];
-      const filename = `${testName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}.spec.ts`;
-      
-      // Try to save via local CLI first, then fallback to server
-      if (localBridge.isConnected()) {
-        console.log('[Raiken] 💾 Saving test via local CLI...');
-        const result = await localBridge.saveTestToLocal(testContent, filename);
-        
-        if (result.success) {
-          console.log(`[Raiken] ✅ Test saved locally: ${result.path}`);
-        } else {
-          console.warn('[Raiken] ⚠️ Local CLI save failed, falling back to server:', result.error);
-          // Continue to fallback below
-        }
-      }
-      
-      if (!localBridge.isConnected()) {
-        // Fallback: Save via hosted server (existing behavior)
-        console.log('[Raiken] 💾 Saving test via hosted server...');
-        const saveResponse = await fetch('/api/v1/tests', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            action: 'save',
-            filename: testName,
-            content: testContent
-          }),
-        });
+      const filename = `${testName.replace(/[^a-zA-Z0-9.-]/g, '_').toLowerCase()}.spec.ts`;
 
-        if (!saveResponse.ok) {
-          const saveError = await saveResponse.json();
-          console.warn('[Raiken] Failed to save test script:', saveError.error);
-        } else {
-          const saveResult = await saveResponse.json();
-          console.log('[Raiken] Test script saved to:', saveResult.filePath);
+      // save to connected project
+      if (localBridge.isConnected()) {
+        console.log('[Raiken] 💾 Saving test to project...');
+        const result = await localBridge.saveTestToLocal(testContent, filename);
+
+        if (!result.success) {
+          throw new Error(`Failed to save test to project: ${result.error}`);
         }
+        console.log(`[Raiken] ✅ Test saved to project: ${result.path}`);
+      } else {
+        throw new Error('No project connected. Run "raiken remote" in your project directory to save tests.');
       }
-      
+
       // Add to test scripts array
       state.addTestScript(state.generatedTests[state.generatedTests.length - 1]); // Add the last generated script
-      
+
       // Create a new tab in the browser store
       const browserStore = useBrowserStore.getState();
       const newTab = {
@@ -458,9 +326,9 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
           browserType: 'chromium' as const
         }
       };
-      
+
       browserStore.addEditorTab(newTab);
-      
+
       // Refresh list of test files so runTest can pick up latest saved path
       await state.loadTestFiles();
 
@@ -480,95 +348,65 @@ export const useTestStore = createSlice<TestState>('test', (set, get) => ({
   deleteTestFile: async (testPath: string) => {
     const state = get();
     try {
-      // Try to delete via local CLI first, then fallback to server
-      if (localBridge.isConnected()) {
-        console.log('[Raiken] 🗑️ Deleting test via local CLI...');
-        const connection = localBridge.getConnectionInfo();
-        if (connection) {
-          const response = await fetch(`${connection.url}/api/delete-test`, {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${connection.token}`
-            },
-            body: JSON.stringify({ testPath })
-          });
-          
-          if (response.ok) {
-            console.log(`[Raiken] ✅ Test deleted locally: ${testPath}`);
-            state.loadTestFiles(); // Refresh list
-            return;
-          } else {
-            console.warn('[Raiken] ⚠️ Local CLI delete failed, falling back to server');
-            // Continue to fallback below
-          }
-        }
+      // Project-focused: Only delete from connected project
+      if (!localBridge.isConnected()) {
+        throw new Error('No project connected. Cannot delete test file.');
       }
-      
-      // Fallback: Delete via hosted server (unified endpoint)
-      console.log('[Raiken] 🗑️ Deleting test via hosted server...');
-      const response = await fetch(`/api/v1/tests?path=${encodeURIComponent(testPath)}`, {
+
+      console.log('[Raiken] 🗑️ Deleting test from project...');
+      const connection = localBridge.getConnectionInfo();
+      if (!connection) {
+        throw new Error('No project connection available');
+      }
+
+      const response = await fetch(`${connection.url}/api/delete-test`, {
         method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${connection.token}`
+        },
+        body: JSON.stringify({ testPath })
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete test file');
+        throw new Error(`Failed to delete test from project: ${response.status} ${response.statusText}`);
       }
 
-      const result = await response.json();
-      console.log(`[Raiken] Test file deleted: ${testPath}`);
-      state.setTestFiles(state.testFiles.filter(file => file.path !== testPath));
+      console.log(`[Raiken] ✅ Test deleted from project: ${testPath}`);
+      state.loadTestFiles(); // Refresh list
     } catch (error) {
       console.error('Failed to delete test file:', error);
+      throw error; // Re-throw so UI can handle it
     }
   },
 
   loadTestFiles: async () => {
     const state = get();
     state.setIsLoadingFiles(true);
-    
+
     try {
-      // When bridge is connected, ONLY use project files - no fallback to Raiken
+      // load files from connected project
       if (localBridge.isConnected()) {
-        console.log('[Raiken] 📁 Loading tests from project via local bridge...');
+        console.log('[Raiken] 📁 Loading tests from project...');
         const result = await localBridge.getLocalTestFiles();
-        
+
         if (result.success && result.files && Array.isArray(result.files)) {
           console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from project`);
           state.setTestFiles(result.files);
         } else {
-          console.warn('[Raiken] ⚠️ Failed to load project files:', result);
-          // When bridge is connected but fails, show empty list (project-centric)
+          console.warn('[Raiken] ⚠️ Failed to load project files:', result.error);
           state.setTestFiles([]);
         }
-        return;
-      }
-      
-      // Only when NO bridge: Load from Raiken's generated-tests
-      console.log('[Raiken] 📁 No bridge connected - loading from Raiken generated-tests...');
-      const response = await fetch('/api/v1/tests?action=list');
-      
-      if (!response.ok) {
-        throw new Error('Failed to load test files');
-      }
-      
-      const data = await response.json();
-      const files = data.files || [];
-      
-      // Ensure files is an array
-      if (!Array.isArray(files)) {
-        console.error('[Raiken] ⚠️ API returned non-array for files:', files);
+      } else {
+        // No project connected - show empty list
+        console.log('[Raiken] 📁 No project connected');
         state.setTestFiles([]);
-        return;
       }
-      
-      state.setTestFiles(files);
-      console.log(`[Raiken] ✅ Loaded ${files.length} test files from Raiken`);
     } catch (error) {
       console.error('Failed to load test files:', error);
+      state.setTestFiles([]);
     } finally {
       state.setIsLoadingFiles(false);
     }
   }
-})); 
+}));

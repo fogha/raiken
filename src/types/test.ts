@@ -80,15 +80,6 @@ export interface TestTab {
   error?: string;
 }
 
-// Component props types
-export interface TabbedTestEditorProps {
-  onRunTest: (scriptContent: string, scriptId: string, config: TestScriptConfig) => Promise<void>;
-  onCloseTab?: (tabId: string) => Promise<void>;
-  initialScript?: string;
-  globalConfig: TestScriptConfig;
-  onRef?: (ref: { addNewTab: (content: string, name: string) => string }) => void;
-}
-
 // UI-specific test report interface for displaying execution results
 export interface UITestReport {
   id: string;

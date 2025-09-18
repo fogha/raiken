@@ -13,22 +13,24 @@ src/
 │   │   ├── browser/route.ts      # Unified browser operations
 │   │   └── tests/route.ts        # Unified test operations
 │   ├── layout.tsx                # Root layout
-│   ├── page.tsx                  # Home page
-│   └── settings/                 # Settings pages
+│   ├── page.tsx                  # Home page (redirects to /tests)
+│   ├── settings/                 # Settings pages
+│   └── tests/                    # Test management pages
+│       ├── layout.tsx            # Tests layout wrapper
+│       ├── page.tsx              # Main tests page (browser + TestBuilder)
+│       ├── editor/page.tsx       # Test Editor
+│       ├── manager/page.tsx      # Test Manager
+│       └── reports/page.tsx      # Test Reports
 │
 ├── components/                   # React components
 │   ├── layout/                   # Layout components
-│   │   ├── ProjectViewer.tsx     # Main container
 │   │   ├── SideBar.tsx          # Navigation sidebar
 │   │   └── TopBar.tsx           # Header navigation
-│   ├── LocalBridgeStatus.tsx    # CLI bridge status
-│   ├── NotificationContainer.tsx # Toast notifications
 │   └── ui/                      # Reusable UI primitives
 │
 ├── core/                        # Domain logic
 │   ├── browser/                 # Browser automation
-│   │   ├── playwright.service.ts
-│   │   └── ui/PlaywrightBrowser.tsx
+│   │   └── playwright.service.ts
 │   ├── dom/                     # DOM manipulation
 │   │   ├── dom-analyzer.ts
 │   │   └── domUtils.ts

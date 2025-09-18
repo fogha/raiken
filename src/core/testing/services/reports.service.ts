@@ -1,12 +1,14 @@
-/**
- * Test Reports Service
- * 
- * This service handles test report generation, storage, and retrieval
- * with a focus on simplicity and reliability.
- */
-
 import fs from 'fs/promises';
 import path from 'path';
+
+// Size/scope limits to keep reports lean (override via env)
+const MAX_SCREENSHOTS = parseInt(process.env.RAIKEN_REPORT_MAX_SCREENSHOTS || '10');
+const MAX_VIDEOS = parseInt(process.env.RAIKEN_REPORT_MAX_VIDEOS || '5');
+const MAX_TRACES = parseInt(process.env.RAIKEN_REPORT_MAX_TRACES || '5');
+const MAX_ERRORS = parseInt(process.env.RAIKEN_REPORT_MAX_ERRORS || '50');
+const MAX_BROWSER_LOGS = parseInt(process.env.RAIKEN_REPORT_MAX_BROWSER_LOGS || '200');
+const AI_STDIO_MAX = parseInt(process.env.RAIKEN_AI_STDIO_MAX || '4000');
+const ENABLE_AI_ANALYSIS = (process.env.RAIKEN_ENABLE_AI_ANALYSIS || 'true').toLowerCase() !== 'false';
 
 export interface TestReport {
   id: string;
@@ -67,8 +69,15 @@ export interface TestReport {
 export class TestReportsService {
   private reportsDir: string;
 
-  constructor() {
-    this.reportsDir = path.resolve(process.cwd(), 'test-results', 'reports');
+  constructor(customReportsDir?: string) {
+    this.reportsDir = customReportsDir || path.resolve(process.cwd(), 'test-results', 'reports');
+  }
+
+  /**
+   * Update the reports directory (for project-centric storage)
+   */
+  setReportsDirectory(reportsDir: string) {
+    this.reportsDir = reportsDir;
   }
 
   /**
@@ -104,35 +113,48 @@ export class TestReportsService {
     let summary = data.summary;
     let suggestions = data.suggestions;
     
-    if (data.exitCode !== 0 && process.env.OPENROUTER_API_KEY) {
+    if (data.exitCode !== 0 && ENABLE_AI_ANALYSIS && process.env.OPENROUTER_API_KEY) {
       try {
-        const aiAnalysis = await this.generateAIAnalysis(data.rawOutput, data.rawError);
+        const aiAnalysis = await this.generateAIAnalysis({
+          testName: this.extractTestName(data.testPath),
+          testPath: data.testPath,
+          duration: data.duration,
+          errors,
+          browserLogs,
+          screenshots,
+          videos,
+          traces,
+          rawOutput: data.rawOutput,
+          rawError: data.rawError
+        });
         summary = aiAnalysis.summary;
         suggestions = aiAnalysis.suggestions;
       } catch (aiError) {
         console.warn('[TestReports] AI analysis failed:', aiError);
-        summary = 'Test failed - AI analysis unavailable';
-        suggestions = 'Check the error details and artifacts below for debugging information';
+        // Leave summary/suggestions undefined to avoid showing a generic AI section
       }
     }
     
+    const passed = data.exitCode === 0;
     const report: TestReport = {
       id,
       timestamp,
-      testName: this.extractTestName(data.testPath),
+      testName: data.testName || this.extractTestName(data.testPath),
       testPath: data.testPath,
-      status: data.exitCode === 0 ? 'passed' : 'failed',
+      status: passed ? 'passed' : 'failed',
       duration: data.duration,
       exitCode: data.exitCode,
-      screenshots,
-      videos,
-      traces,
+      // Enforce limits to prevent bloated JSON
+      screenshots: screenshots.slice(-MAX_SCREENSHOTS),
+      videos: videos.slice(-MAX_VIDEOS),
+      traces: traces.slice(-MAX_TRACES),
       rawOutput: data.rawOutput,
       rawError: data.rawError,
-      summary: summary || (data.exitCode === 0 ? 'Test passed successfully' : 'Test failed'),
-      suggestions: suggestions || (data.exitCode === 0 ? undefined : 'Review the artifacts and error details below'),
-      errors,
-      browserLogs
+      // Only include AI summary/suggestions when available or for passed tests
+      summary: passed ? 'Test passed successfully' : summary,
+      suggestions: passed ? undefined : suggestions,
+      errors: errors.slice(0, MAX_ERRORS),
+      browserLogs: browserLogs.slice(-MAX_BROWSER_LOGS)
     };
     
     // Save report
@@ -444,10 +466,18 @@ export class TestReportsService {
   /**
    * Generate AI analysis for failed tests
    */
-  private async generateAIAnalysis(rawOutput: string, rawError: string): Promise<{
-    summary: string;
-    suggestions: string;
-  }> {
+  private async generateAIAnalysis(context: {
+    testName: string;
+    testPath: string;
+    duration: number;
+    errors: TestReport['errors'];
+    browserLogs: TestReport['browserLogs'];
+    screenshots: TestReport['screenshots'];
+    videos: TestReport['videos'];
+    traces: TestReport['traces'];
+    rawOutput: string;
+    rawError: string;
+  }): Promise<{ summary: string; suggestions: string; }> {
     const { OpenRouterService } = await import('./openrouter.service');
     
     const openRouter = new OpenRouterService({
@@ -455,30 +485,63 @@ export class TestReportsService {
       model: 'anthropic/claude-3.5-sonnet'
     });
 
-    const analysisPrompt = `You are an expert Playwright test analyst. Analyze this test failure and provide insights.
+    const truncate = (text: string, max = AI_STDIO_MAX) => text?.slice(0, max) || '';
+    const topErrors = (context.errors || []).slice(0, 3);
+    const recentLogs = (context.browserLogs || []).slice(-10);
+    const artifacts = {
+      screenshots: (context.screenshots || []).slice(-3).map(a => a.name),
+      videos: (context.videos || []).slice(-2).map(a => a.name),
+      traces: (context.traces || []).slice(-2).map(a => a.name)
+    };
 
-PLAYWRIGHT OUTPUT:
-${rawOutput}
+    const analysisPrompt = `You are an expert Playwright test analyst. Analyze this failed test and return STRICT JSON only.
 
-PLAYWRIGHT ERROR:
-${rawError}
+Context:
+- Test Name: ${context.testName}
+- Test Path: ${context.testPath}
+- Duration: ${context.duration}ms
 
-Provide a JSON response with:
+Top Parsed Errors (up to 3):
+${JSON.stringify(topErrors, null, 2)}
+
+Recent Browser Logs (up to 10):
+${JSON.stringify(recentLogs, null, 2)}
+
+Artifacts:
+${JSON.stringify(artifacts, null, 2)}
+
+STDOUT (truncated):
+${truncate(context.rawOutput)}
+
+STDERR (truncated):
+${truncate(context.rawError)}
+
+Respond ONLY with JSON matching this schema:
 {
-  "summary": "Brief explanation of what went wrong",
-  "suggestions": "Specific steps to fix the issue"
+  "issue": string,              // What likely failed and why
+  "rootCause": string,          // The underlying cause
+  "fix": string,                // Specific fix steps (selectors, waits, config)
+  "nextSteps": string,          // What to try next if fix fails
+  "confidence": number,         // 0-100
+  "failingStep": string|null,   // Optional step/selector if evident
+  "selectorHints": string|null  // Better selector strategies if relevant
 }`;
 
     try {
       const response = await openRouter.generateTestScript(analysisPrompt);
       if (response) {
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        // Try to parse JSON from response (support fenced code blocks or raw JSON)
+        const codeBlockMatch = response.match(/```json[\s\S]*?```/i);
+        const jsonText = codeBlockMatch ? codeBlockMatch[0].replace(/```json|```/gi, '') : response;
+        const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
-          if (parsed.summary && parsed.suggestions) {
+          const issue = parsed.issue || parsed.summary;
+          const fix = parsed.fix || parsed.suggestions || parsed.nextSteps;
+          if (issue || fix) {
             return {
-              summary: parsed.summary,
-              suggestions: parsed.suggestions
+              summary: issue || 'Test failed - see analysis below',
+              suggestions: fix || 'Review logs, selectors, and waits suggested by the analysis'
             };
           }
         }

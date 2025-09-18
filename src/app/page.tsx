@@ -1,15 +1,6 @@
-import dynamic from 'next/dynamic';
-
-// Use dynamic import to avoid SSR issues with iframe manipulation
-const ProjectViewer = dynamic(
-  () => import('../components/layout/ProjectViewer'),
-  { ssr: false }
-);
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <main className="min-h-screen">
-      <ProjectViewer />
-    </main>
-  );
+  // Redirect to the tests page
+  redirect('/tests');
 }

@@ -68,26 +68,43 @@ class LocalBridgeService {
     }
 
     try {
-      const response = await fetch(`${this.connection.url}/api/v1/tests`, {
+      // Primary: new bridge endpoint
+      let response = await fetch(`${this.connection.url}/api/save-test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${this.connection.token}`
         },
         body: JSON.stringify({
-          action: 'save',
           content: testCode,
           filename,
           tabId
         })
       });
 
+      // Fallback for older bridge servers
+      if (response.status === 404) {
+        response = await fetch(`${this.connection.url}/api/v1/tests`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.connection.token}`
+          },
+          body: JSON.stringify({
+            action: 'save',
+            content: testCode,
+            filename,
+            tabId
+          })
+        });
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const result = await response.json();
-      return { success: true, path: result.path };
+      return { success: true, path: result.path || result.filePath };
     } catch (error) {
       console.error('Failed to save test to local CLI:', error);
       return { 
@@ -133,6 +150,49 @@ class LocalBridgeService {
 
       const data = await response.json();
       return { success: true, files: data.files };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async getLocalReports(): Promise<{ success: boolean; reports?: any[]; error?: string }> {
+    if (!this.connection) {
+      return { success: false, error: 'No local CLI connection' };
+    }
+
+    try {
+      const response = await fetch(`${this.connection.url}/api/reports`, {
+        headers: {
+          'Authorization': `Bearer ${this.connection.token}`
+        }
+      });
+
+      const data = await response.json();
+      return { success: true, reports: data.reports };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+
+  async deleteLocalReport(reportId: string): Promise<{ success: boolean; error?: string }> {
+    if (!this.connection) {
+      return { success: false, error: 'No local CLI connection' };
+    }
+
+    try {
+      const response = await fetch(`${this.connection.url}/api/reports/${reportId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${this.connection.token}`
+        }
+      });
+
+      if (response.ok) {
+        return { success: true };
+      } else {
+        const error = await response.json();
+        return { success: false, error: error.error || 'Failed to delete report' };
+      }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }

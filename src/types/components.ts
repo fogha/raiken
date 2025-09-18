@@ -7,9 +7,6 @@ import { DOMNode } from './dom';
 import { TestTab, TestExecutionResult } from './test';
 
 // Layout Component Props
-export interface ProjectViewerProps {
-  className?: string;
-}
 
 export interface SideBarProps {
   collapsed?: boolean;
@@ -22,11 +19,6 @@ export interface TopBarProps {
 }
 
 // Core Component Props
-export interface PlaywrightBrowserProps {
-  onDOMTreeUpdate?: (domTree: DOMNode | null) => void;
-  onTestGenerated?: (test: string) => void;
-  className?: string;
-}
 
 export interface TestBuilderProps {
   onTestGenerated?: (test: string) => void;

@@ -120,9 +120,51 @@ export function TestScriptEditor({ value, onChange, language = 'typescript', err
 
   // Initialize Monaco Editor when component mounts
   useEffect(() => {
+    // Set up Monaco environment to disable workers that cause issues
+    if (typeof window !== 'undefined') {
+      window.MonacoEnvironment = {
+        getWorker: function (workerId, label) {
+          // Return a dummy worker to prevent loading issues
+          return new Worker(
+            URL.createObjectURL(
+              new Blob(['self.postMessage("")'], { type: 'application/javascript' })
+            )
+          );
+        }
+      };
+    }
+
     // This ensures Monaco editor loads correctly
     import('monaco-editor').then(monaco => {
       console.log('[Raiken] Monaco editor loaded');
+      
+      // Disable TypeScript language service to prevent worker issues
+      monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: false,
+        noSuggestionDiagnostics: true
+      });
+
+      monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        noSemanticValidation: true,
+        noSyntaxValidation: false,
+        noSuggestionDiagnostics: true
+      });
+
+      // Set basic compiler options
+      monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ES2020,
+        allowNonTsExtensions: true,
+        noEmit: true,
+        allowJs: true
+      });
+
+      monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
+        target: monaco.languages.typescript.ScriptTarget.ES2020,
+        allowNonTsExtensions: true,
+        noEmit: true,
+        allowJs: true
+      });
       
       // Register empty providers for CodeLens and CodeActions
       monaco.languages.registerCodeLensProvider('typescript', {
