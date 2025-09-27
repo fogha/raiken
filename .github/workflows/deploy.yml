@@ -58,7 +58,6 @@ jobs:
         host: ${{ secrets.CONTABO_HOST }}
         username: ${{ secrets.CONTABO_USERNAME }}
         key: ${{ secrets.CONTABO_SSH_KEY }}
-        port: ${{ secrets.CONTABO_PORT || 22 }}
         script: |
           # Set variables
           APP_NAME="raiken"
