@@ -5,13 +5,19 @@ import { relayBridge } from './relay-bridge';
 
 export type BridgeMode = 'local' | 'relay' | 'none';
 
-interface BridgeStatus {
+export interface BridgeStatus {
   mode: BridgeMode;
   connected: boolean;
   url?: string;
   projectName?: string;
   sessionId?: string;
   lastHealthCheck?: number;
+  projectInfo?: {
+    name: string;
+    type: string;
+    testDir: string;
+    [key: string]: any;
+  };
 }
 
 class UnifiedBridgeService {
@@ -153,16 +159,37 @@ class UnifiedBridgeService {
     }
   }
 
+  async deleteReport(reportId: string): Promise<{ success: boolean; error?: string }> {
+    const bridge = await this.getBridge();
+    if (!bridge) {
+      return {
+        success: false,
+        error: 'No bridge connection available'
+      };
+    }
+
+    try {
+      return await bridge.rpc('deleteReport', { reportId });
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
+  }
+
   getStatus(): BridgeStatus {
     switch (this.currentMode) {
       case 'local':
         const localStatus = localBridge.getConnectionStatus();
+        const localConnection = localBridge.getConnectionInfo();
         return {
           mode: 'local',
           connected: localStatus.connected,
           url: localStatus.url,
           projectName: localStatus.projectName,
-          lastHealthCheck: localStatus.lastHealthCheck
+          lastHealthCheck: localStatus.lastHealthCheck,
+          projectInfo: localConnection?.projectInfo
         };
       
       case 'relay':

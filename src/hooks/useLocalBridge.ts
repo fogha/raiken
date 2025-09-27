@@ -1,18 +1,10 @@
 "use client";
 
 import { useState, useEffect } from 'react';
-import { unifiedBridge, BridgeMode } from '@/lib/unified-bridge';
-
-interface BridgeConnection {
-  mode: BridgeMode;
-  connected: boolean;
-  url?: string;
-  projectName?: string;
-  sessionId?: string;
-}
+import { unifiedBridge, BridgeMode, BridgeStatus } from '@/lib/unified-bridge';
 
 export function useLocalBridge() {
-  const [connection, setConnection] = useState<BridgeConnection | null>(null);
+  const [connection, setConnection] = useState<BridgeStatus | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
 
   const detectBridge = async () => {
@@ -62,6 +54,7 @@ export function useLocalBridge() {
     executeTest: unifiedBridge.executeTest.bind(unifiedBridge),
     getTestFiles: unifiedBridge.getTestFiles.bind(unifiedBridge),
     getReports: unifiedBridge.getReports.bind(unifiedBridge),
+    deleteReport: unifiedBridge.deleteReport.bind(unifiedBridge),
     getStatus: () => unifiedBridge.getStatus(),
     disconnect: () => unifiedBridge.disconnect()
   };

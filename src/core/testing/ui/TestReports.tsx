@@ -16,7 +16,7 @@ export function TestReports() {
   const [error, setError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
-  const { isConnected, connection } = useLocalBridge();
+  const { isConnected, connection, getReports, deleteReport: deleteReportFromBridge } = useLocalBridge();
 
   // Helper function to get artifact URL based on bridge connection
   const getArtifactUrl = (artifact: any) => {
@@ -40,19 +40,14 @@ export function TestReports() {
       if (isConnected && connection) {
         // Project-focused: Only fetch from local bridge when connected
         console.log('[TestReports] Fetching reports from project...');
-        const response = await fetch(`${connection.url}/api/reports`, {
-          headers: {
-            'Authorization': `Bearer ${connection.token}`
-          }
-        });
+        const result = await getReports();
         
-        if (response.ok) {
-          const data = await response.json();
-          const reports = data.reports || [];
+        if (result.success) {
+          const reports = result.reports || [];
           console.log(`[TestReports] Found ${reports.length} reports from project`);
           setReports(Array.isArray(reports) ? reports : []);
         } else {
-          throw new Error(`Failed to fetch project reports: ${response.status} ${response.statusText}`);
+          throw new Error(result.error || 'Failed to fetch project reports');
         }
       } else {
         // No project connected - show empty state
@@ -76,17 +71,12 @@ export function TestReports() {
     try {
       if (isConnected && connection) {
         console.log('[TestReports] Deleting report from project...');
-        const response = await fetch(`${connection.url}/api/reports/${id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${connection.token}`
-          }
-        });
+        const result = await deleteReportFromBridge(id);
         
-        if (response.ok) {
+        if (result.success) {
           setReports(prev => prev.filter(report => report.id !== id));
         } else {
-          throw new Error(`Failed to delete project report: ${response.status} ${response.statusText}`);
+          throw new Error(result.error || 'Failed to delete project report');
         }
       } else {
         throw new Error('No project connected - cannot delete report');
