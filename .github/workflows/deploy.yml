@@ -128,262 +128,45 @@ jobs:
             echo "🧹 Pruning old images..."
             sudo docker image prune -f
 
-      - name: Configure Nginx (HTTP only for ACME)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CONTABO_HOST }}
-          username: ${{ secrets.CONTABO_USERNAME }}
-          key: ${{ secrets.CONTABO_SSH_KEY }}
-          port: ${{ secrets.CONTABO_PORT }}
-          script: |
-            set -e
-            APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            if [ -z "$APP_DOMAIN" ]; then
-              echo "ℹ️ No APP_DOMAIN set; installing default HTTP site."
-              APP_DOMAIN="default"
-            fi
+       - name: Clean up old Nginx configs
+         uses: appleboy/ssh-action@v1.0.3
+         with:
+           host: ${{ secrets.CONTABO_HOST }}
+           username: ${{ secrets.CONTABO_USERNAME }}
+           key: ${{ secrets.CONTABO_SSH_KEY }}
+           port: ${{ secrets.CONTABO_PORT }}
+           script: |
+             set -e
+             echo "🧹 Cleaning up old Nginx configs..."
+             
+             # Remove all enabled sites to avoid SSL certificate errors
+             sudo rm -f /etc/nginx/sites-enabled/*
+             
+             # Test nginx config
+             sudo nginx -t
+             
+             # Reload nginx
+             sudo systemctl reload nginx
+             
+             echo "✅ Nginx cleaned up - app will run on localhost:3000"
 
-            # Remove any enabled site that references missing certs to avoid nginx -t failure
-            if sudo nginx -T 2>/dev/null | grep -q "/etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem"; then
-              echo "🧹 Disabling stale SSL site temporarily..."
-              sudo rm -f "/etc/nginx/sites-enabled/$APP_DOMAIN" || true
-            fi
+       - name: Final health check
+         uses: appleboy/ssh-action@v1.0.3
+         with:
+           host: ${{ secrets.CONTABO_HOST }}
+           username: ${{ secrets.CONTABO_USERNAME }}
+           key: ${{ secrets.CONTABO_SSH_KEY }}
+           port: ${{ secrets.CONTABO_PORT }}
+           script: |
+             set -e
+             echo "🔍 Final health check..."
+             sleep 10
 
-            echo "🔧 Writing HTTP-only site for $APP_DOMAIN (serves ACME + proxies app)"
-            sudo mkdir -p /var/www/certbot
-            sudo chown -R www-data:www-data /var/www/certbot
-
-            NGINX_CONFIG="/etc/nginx/sites-available/$APP_DOMAIN"
-            NGINX_ENABLED="/etc/nginx/sites-enabled/$APP_DOMAIN"
-
-            # If APP_DOMAIN is 'default', use wildcard server; else use server_name
-            if [ "$APP_DOMAIN" = "default" ]; then
-              sudo tee "$NGINX_CONFIG" > /dev/null <<'EOF'
-            server {
-                listen 80 default_server;
-                server_name _;
-
-                # ACME placeholder (kept for uniformity)
-                location /.well-known/acme-challenge/ {
-                    root /var/www/certbot;
-                }
-
-                location / {
-                    proxy_pass http://localhost:3000;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade $http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host $host;
-                    proxy_set_header X-Real-IP $remote_addr;
-                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto $scheme;
-                    proxy_read_timeout 86400;
-                }
-
-                location /health {
-                    access_log off;
-                    return 200 "healthy\n";
-                    add_header Content-Type text/plain;
-                }
-            }
-            EOF
-            else
-              sudo tee "$NGINX_CONFIG" > /dev/null <<EOF
-            server {
-                listen 80;
-                server_name $APP_DOMAIN;
-
-                # ACME webroot for Certbot
-                location /.well-known/acme-challenge/ {
-                    root /var/www/certbot;
-                }
-
-                # Proxy to app (no SSL yet)
-                location / {
-                    proxy_pass http://localhost:3000;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_read_timeout 86400;
-                }
-            }
-            EOF
-            fi
-
-            sudo ln -sf "$NGINX_CONFIG" "$NGINX_ENABLED"
-            echo "🧪 nginx -t"
-            sudo nginx -t
-            echo "🔄 Reloading Nginx..."
-            sudo systemctl reload nginx
-            echo "✅ HTTP config ready."
-
-      - name: Setup SSL certificate (webroot)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CONTABO_HOST }}
-          username: ${{ secrets.CONTABO_USERNAME }}
-          key: ${{ secrets.CONTABO_SSH_KEY }}
-          port: ${{ secrets.CONTABO_PORT }}
-          script: |
-            set -e
-            APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            ADMIN_EMAIL="${{ secrets.ADMIN_EMAIL }}"
-
-            if [ -z "$APP_DOMAIN" ]; then
-              echo "ℹ️ No APP_DOMAIN set; skipping SSL issuance."
-              exit 0
-            fi
-            if [ -z "$ADMIN_EMAIL" ]; then
-              echo "❌ ADMIN_EMAIL must be set to obtain a certificate."
-              exit 1
-            fi
-
-            echo "🔒 Ensuring certbot installed..."
-            if ! command -v certbot >/dev/null 2>&1; then
-              sudo apt-get update -y
-              sudo apt-get install -y certbot
-            fi
-
-            echo "📁 Ensuring ACME webroot exists..."
-            sudo mkdir -p /var/www/certbot
-            sudo chown -R www-data:www-data /var/www/certbot
-
-            if [ -d "/etc/letsencrypt/live/$APP_DOMAIN" ]; then
-              echo "🔄 Renewing existing certificate..."
-              sudo certbot renew --quiet
-            else
-              echo "🆕 Obtaining new certificate via webroot for $APP_DOMAIN ..."
-              sudo certbot certonly --webroot \
-                -w /var/www/certbot \
-                -d "$APP_DOMAIN" \
-                --email "$ADMIN_EMAIL" \
-                --agree-tos --non-interactive
-            fi
-
-            echo "⏰ Setting up auto-renew + nginx reload..."
-            (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/certbot renew --quiet && /usr/sbin/nginx -s reload") | crontab -
-            echo "✅ Certificate available at /etc/letsencrypt/live/$APP_DOMAIN/"
-
-      - name: Configure Nginx (enable HTTPS)
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CONTABO_HOST }}
-          username: ${{ secrets.CONTABO_USERNAME }}
-          key: ${{ secrets.CONTABO_SSH_KEY }}
-          port: ${{ secrets.CONTABO_PORT }}
-          script: |
-            set -e
-            APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            if [ -z "$APP_DOMAIN" ]; then
-              echo "ℹ️ No APP_DOMAIN set; keeping default HTTP site."
-              exit 0
-            fi
-
-            if [ ! -f "/etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem" ]; then
-              echo "❌ Cert not found for $APP_DOMAIN; cannot enable HTTPS yet."
-              exit 1
-            fi
-
-            echo "🔧 Writing HTTPS + redirect for $APP_DOMAIN ..."
-            NGINX_CONFIG="/etc/nginx/sites-available/$APP_DOMAIN"
-            sudo tee "$NGINX_CONFIG" > /dev/null <<EOF
-            # HTTP: keep ACME challenges, redirect the rest to HTTPS
-            server {
-                listen 80;
-                server_name $APP_DOMAIN;
-
-                location /.well-known/acme-challenge/ {
-                    root /var/www/certbot;
-                }
-
-                location / {
-                    return 301 https://\$host\$request_uri;
-                }
-            }
-
-            # HTTPS: proxy to the app
-            server {
-                listen 443 ssl http2;
-                server_name $APP_DOMAIN;
-
-                ssl_certificate     /etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem;
-                ssl_certificate_key /etc/letsencrypt/live/$APP_DOMAIN/privkey.pem;
-                ssl_protocols TLSv1.2 TLSv1.3;
-
-                add_header X-Frame-Options DENY;
-                add_header X-Content-Type-Options nosniff;
-                add_header X-XSS-Protection "1; mode=block";
-                add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-
-                location / {
-                    proxy_pass http://localhost:3000;
-                    proxy_http_version 1.1;
-                    proxy_set_header Upgrade \$http_upgrade;
-                    proxy_set_header Connection 'upgrade';
-                    proxy_set_header Host \$host;
-                    proxy_set_header X-Real-IP \$remote_addr;
-                    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                    proxy_set_header X-Forwarded-Proto \$scheme;
-                    proxy_read_timeout 86400;
-                }
-
-                location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-                    proxy_pass http://localhost:3000;
-                    proxy_set_header Host \$host;
-                    expires 1y;
-                    add_header Cache-Control "public, immutable";
-                }
-
-                location /health {
-                    access_log off;
-                    return 200 "healthy\n";
-                    add_header Content-Type text/plain;
-                }
-            }
-            EOF
-
-            sudo ln -sf "$NGINX_CONFIG" "/etc/nginx/sites-enabled/$APP_DOMAIN"
-            echo "🧪 nginx -t"
-            sudo nginx -t
-            echo "🔄 Reloading Nginx..."
-            sudo systemctl reload nginx
-            echo "✅ HTTPS enabled for $APP_DOMAIN"
-
-      - name: Final health check
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CONTABO_HOST }}
-          username: ${{ secrets.CONTABO_USERNAME }}
-          key: ${{ secrets.CONTABO_SSH_KEY }}
-          port: ${{ secrets.CONTABO_PORT }}
-          script: |
-            set -e
-            APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            echo "🔍 Final health check..."
-            sleep 10
-
-            if [ -n "$APP_DOMAIN" ]; then
-              if curl -f -s "https://$APP_DOMAIN" > /dev/null; then
-                echo "✅ Accessible via HTTPS: https://$APP_DOMAIN"
-                exit 0
-              fi
-              if curl -f -s "http://$APP_DOMAIN" > /dev/null; then
-                echo "⚠️ Accessible via HTTP but not HTTPS: http://$APP_DOMAIN"
-                exit 0
-              fi
-              echo "❌ Not accessible at domain: $APP_DOMAIN"
-              sudo docker compose ps || true
-              exit 1
-            else
-              if curl -f -s "http://localhost:3000" > /dev/null; then
-                echo "✅ App running on localhost:3000"
-              else
-                echo "❌ App not accessible locally"
-                sudo docker compose ps || true
-                exit 1
-              fi
-            fi
+             if curl -f -s "http://localhost:3000" > /dev/null; then
+               echo "✅ App running on localhost:3000"
+               echo "🌐 Access your app at: http://your-server-ip:3000"
+             else
+               echo "❌ App not accessible"
+               sudo docker compose ps || true
+               exit 1
+             fi
