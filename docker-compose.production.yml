@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: raiken-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+      - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-0.1.0}
+      - RAIKEN_ENABLE_AI_ANALYSIS=${RAIKEN_ENABLE_AI_ANALYSIS:-true}
+      # Bridge system configuration
+      - NEXT_PUBLIC_RELAY_URL=ws://84.46.245.248:3001/bridge
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - relay
+
+  # New: Relay server for bridge fallback
+  relay:
+    image: node:18-alpine
+    container_name: raiken-relay
+    restart: unless-stopped
+    working_dir: /app
+    environment:
+      - NODE_ENV=production
+      - RELAY_PORT=3001
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./relay-server.js:/app/relay-server.js:ro
+    command: ["node", "relay-server.js"]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  postgres_data:

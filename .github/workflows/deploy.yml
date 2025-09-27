@@ -80,6 +80,64 @@ jobs:
             echo "🛑 Bringing down current stack (if any)"
             sudo docker compose down || true
 
+            echo "📁 Copying relay server..."
+            if [ ! -f relay-server.js ]; then
+              sudo tee relay-server.js > /dev/null <<'RELAY_EOF'
+            #!/usr/bin/env node
+            const WebSocket = require('ws');
+            const http = require('http');
+            const url = require('url');
+            const PORT = process.env.RELAY_PORT || 3001;
+            const sessions = new Map();
+            const server = http.createServer((req, res) => {
+              if (req.url === '/health') {
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'ok', sessions: sessions.size, timestamp: new Date().toISOString() }));
+                return;
+              }
+              res.writeHead(200, { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/plain' });
+              res.end('Raiken Relay Server\\nActive sessions: ' + sessions.size);
+            });
+            const wss = new WebSocket.Server({ server, path: '/bridge' });
+            wss.on('connection', (ws, req) => {
+              const query = url.parse(req.url, true).query;
+              const role = query.role;
+              const sessionId = query.session;
+              console.log(\`[\${new Date().toISOString()}] New \${role} connection for session: \${sessionId}\`);
+              if (!sessionId || !role || !['web', 'cli'].includes(role)) {
+                ws.close(1008, 'Invalid parameters');
+                return;
+              }
+              let session = sessions.get(sessionId);
+              if (!session) { session = {}; sessions.set(sessionId, session); }
+              session[role] = ws;
+              ws.on('message', (data) => {
+                try {
+                  const message = JSON.parse(data.toString());
+                  const targetRole = role === 'web' ? 'cli' : 'web';
+                  const targetWs = session[targetRole];
+                  if (targetWs && targetWs.readyState === WebSocket.OPEN) {
+                    targetWs.send(data);
+                  } else if (message.type === 'rpc' && message.id) {
+                    ws.send(JSON.stringify({ id: message.id, type: 'rpc', error: \`No \${targetRole} connection available\` }));
+                  }
+                } catch (error) { console.error('Error handling message:', error); }
+              });
+              ws.on('close', () => {
+                if (session && session[role] === ws) {
+                  delete session[role];
+                  if (Object.keys(session).length === 0) sessions.delete(sessionId);
+                }
+              });
+              ws.send(JSON.stringify({ type: 'welcome', role, sessionId, timestamp: Date.now() }));
+            });
+            server.listen(PORT, '0.0.0.0', () => {
+              console.log(\`🌐 Raiken Relay Server running on port \${PORT}\`);
+            });
+            RELAY_EOF
+              sudo chmod +x relay-server.js
+            fi
+
             if [ ! -f docker-compose.yml ]; then
               echo "📝 Creating docker-compose.yml..."
               sudo tee docker-compose.yml > /dev/null <<EOF
@@ -95,6 +153,7 @@ jobs:
                   - NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL }}
                   - NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
                   - RAIKEN_ENABLE_AI_ANALYSIS=true
+                  - NEXT_PUBLIC_RELAY_URL=ws://84.46.245.248:3001/bridge
                 ports:
                   - "3000:3000"
                 volumes:
@@ -106,6 +165,28 @@ jobs:
                   timeout: 10s
                   retries: 3
                   start_period: 40s
+                depends_on:
+                  - relay
+              
+              relay:
+                image: node:18-alpine
+                container_name: ${APP_NAME}-relay
+                restart: unless-stopped
+                working_dir: /app
+                environment:
+                  - NODE_ENV=production
+                  - RELAY_PORT=3001
+                ports:
+                  - "3001:3001"
+                volumes:
+                  - ./relay-server.js:/app/relay-server.js:ro
+                command: ["node", "relay-server.js"]
+                healthcheck:
+                  test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 10s
             EOF
             fi
 
@@ -115,13 +196,24 @@ jobs:
             echo "⬆️  Starting app stack..."
             sudo docker compose up -d
 
-            echo "⏳ Waiting for app..."
+            echo "⏳ Waiting for services..."
             sleep 30
+            
+            # Check main app
             if curl -f -s http://localhost:3000 > /dev/null; then
-              echo "✅ App is healthy on http://localhost:3000"
+              echo "✅ Main app is healthy on http://localhost:3000"
             else
-              echo "❌ App health check failed; recent logs:"
-              sudo docker compose logs --tail=50
+              echo "❌ Main app health check failed; recent logs:"
+              sudo docker compose logs app --tail=50
+              exit 1
+            fi
+            
+            # Check relay server
+            if curl -f -s http://localhost:3001/health > /dev/null; then
+              echo "✅ Relay server is healthy on http://localhost:3001"
+            else
+              echo "❌ Relay server health check failed; recent logs:"
+              sudo docker compose logs relay --tail=50
               exit 1
             fi
 
@@ -163,10 +255,19 @@ jobs:
             sleep 10
 
             if curl -f -s "http://localhost:3000" > /dev/null; then
-              echo "✅ App running on localhost:3000"
-              echo "🌐 Access your app at: http://your-server-ip:3000"
+              echo "✅ Main app running on localhost:3000"
+              echo "🌐 Access your app at: http://84.46.245.248:3000"
             else
-              echo "❌ App not accessible"
+              echo "❌ Main app not accessible"
+              sudo docker compose ps || true
+              exit 1
+            fi
+            
+            if curl -f -s "http://localhost:3001/health" > /dev/null; then
+              echo "✅ Relay server running on localhost:3001"
+              echo "🔗 Bridge relay available at: ws://84.46.245.248:3001/bridge"
+            else
+              echo "❌ Relay server not accessible"
               sudo docker compose ps || true
               exit 1
             fi

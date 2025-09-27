@@ -5,15 +5,50 @@ import cors from 'cors';
 import path from 'path';
 import { ProjectInfo } from './project-detector';
 import { LocalFileSystemAdapter } from './filesystem-adapter';
+import { RelayClient } from './relay-client';
 
 interface RemoteServerOptions {
   port: number;
   projectPath: string;
   projectInfo: ProjectInfo;
+  relayMode?: boolean;
+  relayUrl?: string;
+  sessionId?: string;
 }
 
 export async function startRemoteServer(options: RemoteServerOptions): Promise<void> {
-  const { port: requestedPort, projectPath, projectInfo } = options;
+  const { port: requestedPort, projectPath, projectInfo, relayMode, relayUrl, sessionId } = options;
+
+  // If relay mode is requested, start relay client instead
+  if (relayMode && relayUrl && sessionId) {
+    console.log(chalk.blue('🌐 Starting in relay mode...'));
+    
+    const relayClient = new RelayClient({
+      relayUrl,
+      sessionId,
+      projectPath,
+      projectInfo
+    });
+
+    const connected = await relayClient.connect();
+    if (connected) {
+      console.log(chalk.green('✓ Relay client connected successfully'));
+      console.log(chalk.blue(`  Session ID: ${sessionId}`));
+      console.log(chalk.cyan('💡 Share this session ID with your web app to connect'));
+      
+      // Keep the process alive
+      process.on('SIGINT', () => {
+        console.log(chalk.yellow('\n⚠ Shutting down relay client...'));
+        relayClient.disconnect();
+        process.exit(0);
+      });
+      
+      return;
+    } else {
+      console.log(chalk.red('❌ Failed to connect to relay server'));
+      console.log(chalk.yellow('🔄 Falling back to local HTTP server mode...'));
+    }
+  }
 
   // Find an available port with explicit fallback logic
   let availablePort = await detectPort(requestedPort);
@@ -42,10 +77,42 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   const app = express();
 
   // CORS configuration for hosted platform
+  const allowedOrigins = [
+    'https://raiken.dev',
+    'https://app.raiken.dev',
+    'https://staging.raiken.dev',
+    // Your deployed instance
+    'http://84.46.245.248:3000',
+    'https://84.46.245.248:3000',
+    // Local development
+    'http://localhost:3000',
+    'http://localhost:3001', 
+    'http://localhost:3002',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:3002'
+  ];
+
+  // Allow custom origins from environment
+  const customOrigins = process.env.RAIKEN_ALLOWED_ORIGINS?.split(',').map(o => o.trim()) || [];
+  allowedOrigins.push(...customOrigins);
+
   app.use(cors({
-    origin: ['https://raiken.dev', 'http://localhost:3000', 'http://localhost:3002', 'http://localhost:3001'],
-    credentials: true,
-    methods: ['GET', 'POST', 'DELETE', 'OPTIONS']
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.log(`${chalk.yellow('⚠️ CORS blocked origin:')} ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
+    credentials: false, // We use Bearer tokens, not cookies
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    maxAge: 86400 // Cache preflight for 24 hours
   }));
 
   // Parse JSON bodies
@@ -53,8 +120,19 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
 
   // Generate authentication token
   const authToken = generateAuthToken();
-  console.log(chalk.blue(`🔑 Remote access token: ${authToken}`));
-  console.log(chalk.gray(`   Configure this token in the hosted platform`));
+  
+  // Display token prominently for pairing
+  console.log('');
+  console.log(chalk.bgBlue.white.bold(' 🔑 BRIDGE CONNECTION TOKEN '));
+  console.log('');
+  console.log(chalk.cyan(`   ${authToken}`));
+  console.log('');
+  console.log(chalk.yellow('💡 Copy this token to connect your web app:'));
+  console.log(chalk.gray('   1. Open the Raiken web platform'));
+  console.log(chalk.gray('   2. Click "Connect Local Bridge"'));
+  console.log(chalk.gray('   3. Paste the token above'));
+  console.log(chalk.gray('   4. Token expires in 24 hours'));
+  console.log('');
 
   // Request logging
   app.use('/api', (req: Request, res: Response, next: NextFunction) => {
@@ -68,11 +146,26 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
       return next();
     }
     
-    const token = req.headers.authorization?.replace('Bearer ', '');
-    if (token !== authToken) {
-      console.log(`${chalk.red('❌ Unauthorized request:')} ${req.method} ${req.path}`);
-      return res.status(401).json({ error: 'Unauthorized' });
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log(`${chalk.red('❌ Missing or invalid authorization header:')} ${req.method} ${req.path}`);
+      return res.status(401).json({ error: 'Authorization header required' });
     }
+    
+    const token = authHeader.replace('Bearer ', '');
+    
+    // Validate token format and age
+    if (!validateAuthToken(token)) {
+      console.log(`${chalk.red('❌ Invalid token format:')} ${req.method} ${req.path}`);
+      return res.status(401).json({ error: 'Invalid token format' });
+    }
+    
+    // Check if token matches current session
+    if (token !== authToken) {
+      console.log(`${chalk.red('❌ Token mismatch:')} ${req.method} ${req.path}`);
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    
     next();
   });
 
@@ -241,5 +334,35 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
 }
 
 function generateAuthToken(): string {
-  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+  // Generate a cryptographically secure token
+  const crypto = require('crypto');
+  const randomBytes = crypto.randomBytes(32);
+  const timestamp = Date.now().toString(36);
+  const random = randomBytes.toString('hex');
+  
+  // Combine timestamp and random for uniqueness and some time-based validation
+  return `${timestamp}-${random}`;
+}
+
+function validateAuthToken(token: string): boolean {
+  if (!token || typeof token !== 'string') return false;
+  
+  // Check format: timestamp-randomhex
+  const parts = token.split('-');
+  if (parts.length !== 2) return false;
+  
+  const [timestampPart, randomPart] = parts;
+  
+  // Validate timestamp part (base36)
+  if (!/^[0-9a-z]+$/.test(timestampPart)) return false;
+  
+  // Validate random part (hex)
+  if (!/^[0-9a-f]{64}$/.test(randomPart)) return false;
+  
+  // Check if token is not too old (24 hours)
+  const timestamp = parseInt(timestampPart, 36);
+  const age = Date.now() - timestamp;
+  const maxAge = 24 * 60 * 60 * 1000; // 24 hours
+  
+  return age <= maxAge;
 } 

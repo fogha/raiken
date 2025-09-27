@@ -92,6 +92,48 @@ program
   });
 
 program
+  .command('relay')
+  .description('Connect to cloud relay server (for enterprise/restricted networks)')
+  .option('-s, --session <session>', 'Session ID for relay connection')
+  .option('-u, --url <url>', 'Relay server URL', 'ws://84.46.245.248:3001/bridge')
+  .action(async (options) => {
+    console.log(chalk.blue('🌐 Starting Raiken relay mode...'));
+    
+    // Check if project is initialized
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(process.cwd(), 'raiken.config.json');
+    
+    if (!fs.existsSync(configPath)) {
+      console.log(chalk.red('❌ Project not initialized!'));
+      console.log(chalk.cyan('💡 Run "raiken init" first'));
+      process.exit(1);
+    }
+    
+    // Generate session ID if not provided
+    let sessionId = options.session;
+    if (!sessionId) {
+      sessionId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+      console.log(chalk.yellow('📋 Generated session ID:'), chalk.cyan(sessionId));
+      console.log(chalk.gray('   Use this ID in your web app to connect'));
+    }
+    
+    // Detect the current project
+    const projectInfo = await detectProject(process.cwd());
+    console.log(chalk.green(`✓ Detected ${projectInfo.type} project: ${projectInfo.name}`));
+    
+    // Start in relay mode
+    await startRemoteServer({
+      port: 0, // Not used in relay mode
+      projectPath: process.cwd(),
+      projectInfo,
+      relayMode: true,
+      relayUrl: options.url,
+      sessionId
+    });
+  });
+
+program
   .command('remote')
   .description('Start bridge server for hosted platform integration (project must be initialized first)')
   .option('-p, --port <port>', 'Port to run the server on', '3460')
