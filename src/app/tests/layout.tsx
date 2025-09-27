@@ -1,4 +1,4 @@
-import TestsPage from './page';
+import TestsPage from './TestWrapper';
 
 export default function TestsLayout({
   children,
