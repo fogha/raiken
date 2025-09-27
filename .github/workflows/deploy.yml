@@ -119,33 +119,22 @@ jobs:
             sudo sed -i "s|^\s*image:\s*.*|    image: $DOCKER_IMAGE|g" docker-compose.yml
 
             # Start app
-            echo "🚀 Starting application..."
             sudo docker compose up -d
 
             # Wait and health check
-            echo "⏳ Waiting for application to be ready..."
             sleep 30
-            echo "🔍 Performing health check..."
-             if curl -f -s http://localhost:3000 > /dev/null; then
-               echo "✅ Application is healthy!"
-             else
-               echo "❌ Health check failed! Recent logs:"
-               sudo docker compose logs --tail=50
-               exit 1
-             fi
+            if curl -f -s http://localhost:3000 > /dev/null; then
+              echo "✅ Application is healthy!"
+            else
+              echo "❌ Health check failed!"
+              sudo docker compose logs --tail=20
+              exit 1
+            fi
 
             # Cleanup old images
-            echo "🧹 Cleaning up old Docker images..."
             sudo docker image prune -f
 
-            echo "🎉 Deployment completed successfully!"
-            echo "📊 Container status:"
-            sudo docker compose ps
-
-            echo "📋 Recent logs:"
-            sudo docker compose logs --tail=20
-
-      - name: Setup SSL Certificate
+      - name: Setup SSL Certificate (Optional)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CONTABO_HOST }}
@@ -155,27 +144,26 @@ jobs:
           script: |
             set -e
             APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            if [ -z "$APP_DOMAIN" ]; then APP_DOMAIN="raiken"; fi
+            
+            if [ -z "$APP_DOMAIN" ]; then
+              echo "No domain configured, skipping SSL setup"
+              exit 0
+            fi
 
-            echo "🔒 Setting up SSL certificate for $APP_DOMAIN..."
+            echo "Setting up SSL certificate for $APP_DOMAIN..."
 
             if ! command -v certbot >/dev/null 2>&1; then
-              echo "📦 Installing certbot..."
               sudo apt-get update -y
               sudo apt-get install -y certbot python3-certbot-nginx
             fi
 
             if [ -d "/etc/letsencrypt/live/$APP_DOMAIN" ]; then
-              echo "🔄 Renewing existing SSL certificate..."
               sudo certbot renew --quiet
             else
-              echo "🆕 Obtaining new SSL certificate..."
               sudo certbot --nginx -d "$APP_DOMAIN" --non-interactive --agree-tos --email "${{ secrets.ADMIN_EMAIL }}"
             fi
 
-            echo "⏰ Setting up automatic certificate renewal..."
             (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
-            echo "✅ SSL certificate setup completed!"
 
       - name: Configure Nginx
         uses: appleboy/ssh-action@v1.0.3
@@ -187,16 +175,15 @@ jobs:
           script: |
             set -e
             APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
-            if [ -z "$APP_DOMAIN" ]; then APP_DOMAIN="raiken"; fi
+            if [ -z "$APP_DOMAIN" ]; then 
+              APP_DOMAIN="default"
+            fi
 
             NGINX_CONFIG="/etc/nginx/sites-available/$APP_DOMAIN"
             NGINX_ENABLED="/etc/nginx/sites-enabled/$APP_DOMAIN"
 
-            echo "🔧 Configuring Nginx for $APP_DOMAIN..."
-
-            # Check if SSL certificates exist
-            if [ -f "/etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem" ]; then
-              echo "✅ SSL certificates found, configuring HTTPS..."
+            # Check if SSL certificates exist and domain is configured
+            if [ -f "/etc/letsencrypt/live/$APP_DOMAIN/fullchain.pem" ] && [ "$APP_DOMAIN" != "default" ]; then
               sudo tee "$NGINX_CONFIG" > /dev/null <<EOF
             server {
                 listen 80;
@@ -267,11 +254,10 @@ jobs:
             }
             EOF
             else
-              echo "⚠️ SSL certificates not found, configuring HTTP only..."
               sudo tee "$NGINX_CONFIG" > /dev/null <<EOF
             server {
-                listen 80;
-                server_name $APP_DOMAIN;
+                listen 80 default_server;
+                server_name _;
 
                 location / {
                     proxy_pass http://localhost:3000;
@@ -296,13 +282,8 @@ jobs:
             fi
 
             sudo ln -sf "$NGINX_CONFIG" "$NGINX_ENABLED"
-
-            echo "🧪 Testing Nginx configuration..."
             sudo nginx -t
-
-            echo "🔄 Reloading Nginx..."
             sudo systemctl reload nginx
-            echo "✅ Nginx configuration completed!"
 
       - name: Final Health Check
         uses: appleboy/ssh-action@v1.0.3
@@ -316,25 +297,27 @@ jobs:
             APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
             if [ -z "$APP_DOMAIN" ]; then APP_DOMAIN="raiken"; fi
 
-            echo "🔍 Performing final health check for $APP_DOMAIN..."
             sleep 10
 
-            if curl -f -s "https://$APP_DOMAIN" > /dev/null; then
-              echo "✅ Application is accessible via HTTPS!"
-            else
-              echo "❌ Application is not accessible via HTTPS"
-              echo "🔍 Checking HTTP..."
-              if curl -f -s "http://$APP_DOMAIN" > /dev/null; then
-                echo "⚠️ Application is accessible via HTTP but not HTTPS"
+            # Check if domain is configured
+            if [ -n "$APP_DOMAIN" ] && [ "$APP_DOMAIN" != "default" ]; then
+              if curl -f -s "https://$APP_DOMAIN" > /dev/null; then
+                echo "✅ App accessible via HTTPS: https://$APP_DOMAIN"
               else
-                echo "❌ Application is not accessible at all"
-                echo "📋 Container status:"
+                if curl -f -s "http://$APP_DOMAIN" > /dev/null; then
+                  echo "✅ App accessible via HTTP: http://$APP_DOMAIN"
+                else
+                  echo "❌ App not accessible"
+                  sudo docker compose ps
+                  exit 1
+                fi
+              fi
+            else
+              if curl -f -s "http://localhost:3000" > /dev/null; then
+                echo "✅ App running on localhost:3000"
+              else
+                echo "❌ App not accessible"
                 sudo docker compose ps
-                echo "📋 Nginx status:"
-                sudo systemctl status nginx || true
                 exit 1
               fi
             fi
-
-            echo "🎉 Deployment completed successfully!"
-            echo "🌐 App: https://$APP_DOMAIN"
