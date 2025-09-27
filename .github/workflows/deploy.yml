@@ -1,325 +1,86 @@
-name: Deploy to Server
+- name: Deploy to Contabo Server
+  uses: appleboy/ssh-action@v1.0.3
+  with:
+    host: ${{ secrets.CONTABO_HOST }}
+    username: ${{ secrets.CONTABO_USERNAME }}
+    key: ${{ secrets.CONTABO_SSH_KEY }}
+    script: |
+      set -e
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+      APP_NAME="raiken"
+      APP_DIR="/opt/$APP_NAME"
+      DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+      echo "🚀 Starting deployment of $APP_NAME..."
 
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      security-events: write
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-        tags: |
-          type=ref,event=branch
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-    
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        platforms: linux/amd64
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-    
-    - name: Deploy to Contabo Server
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.CONTABO_HOST }}
-        username: ${{ secrets.CONTABO_USERNAME }}
-        key: ${{ secrets.CONTABO_SSH_KEY }}
-        script: |
-          # Set variables
-          APP_NAME="raiken"
-          APP_DIR="/opt/$APP_NAME"
-          DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-          
-          echo "🚀 Starting deployment of $APP_NAME..."
-          
-          # Create application directory if it doesn't exist
-          sudo mkdir -p $APP_DIR
-          cd $APP_DIR
-          
-          # Login to GitHub Container Registry
-          echo "🔐 Logging into GitHub Container Registry..."
-          echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
-          
-          # Pull latest image
-          echo "📥 Pulling latest Docker image..."
-          sudo docker pull $DOCKER_IMAGE
-          
-          # Stop existing containers
-          echo "🛑 Stopping existing containers..."
-          sudo docker-compose down || true
-          
-          # Create docker-compose.yml if it doesn't exist
-          if [ ! -f docker-compose.yml ]; then
-            echo "📝 Creating docker-compose.yml..."
-            sudo tee docker-compose.yml > /dev/null <<EOF
-          version: '3.8'
-          
-          services:
-            app:
-              image: $DOCKER_IMAGE
-              container_name: $APP_NAME-app
-              restart: unless-stopped
-              environment:
-                - NODE_ENV=production
-                - OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
-                - NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL }}
-                - NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
-                - RAIKEN_ENABLE_AI_ANALYSIS=true
-              ports:
-                - "3000:3000"
-              volumes:
-                - ./data:/app/data
-                - ./logs:/app/logs
-              healthcheck:
-                test: ["CMD", "curl", "-f", "http://localhost:3000"]
-                interval: 30s
-                timeout: 10s
-                retries: 3
-                start_period: 40s
-          EOF
-          fi
-          
-          # Update docker-compose.yml with latest image
-          sudo sed -i "s|image: .*|image: $DOCKER_IMAGE|g" docker-compose.yml
-          
-          # Start the application
-          echo "🚀 Starting application..."
-          sudo docker-compose up -d
-          
-          # Wait for application to be ready
-          echo "⏳ Waiting for application to be ready..."
-          sleep 30
-          
-          # Health check
-          echo "🔍 Performing health check..."
-          if curl -f -s http://localhost:3000 > /dev/null; then
-            echo "✅ Application is healthy!"
-          else
-            echo "❌ Health check failed!"
-            sudo docker-compose logs --tail=50
-            exit 1
-          fi
-          
-          # Clean up old images
-          echo "🧹 Cleaning up old Docker images..."
-          sudo docker image prune -f
-          
-          echo "🎉 Deployment completed successfully!"
-          echo "📊 Container status:"
-          sudo docker-compose ps
-          
-          # Show logs
-          echo "📋 Recent logs:"
-          sudo docker-compose logs --tail=20
+      sudo mkdir -p "$APP_DIR"
+      cd "$APP_DIR"
 
-    - name: Configure Nginx
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.CONTABO_HOST }}
-        username: ${{ secrets.CONTABO_USERNAME }}
-        key: ${{ secrets.CONTABO_SSH_KEY }}
-        port: ${{ secrets.CONTABO_PORT || 22 }}
-        script: |
-          # Nginx configuration
-          NGINX_CONFIG="/etc/nginx/sites-available/${{ secrets.APP_DOMAIN || 'raiken' }}"
-          NGINX_ENABLED="/etc/nginx/sites-enabled/${{ secrets.APP_DOMAIN || 'raiken' }}"
-          
-          echo "🔧 Configuring Nginx..."
-          
-          # Create Nginx configuration
-          sudo tee $NGINX_CONFIG > /dev/null <<EOF
-          server {
-              listen 80;
-              server_name ${{ secrets.APP_DOMAIN }};
-              
-              # Redirect HTTP to HTTPS
-              return 301 https://\$server_name\$request_uri;
-          }
-          
-          server {
-              listen 443 ssl http2;
-              server_name ${{ secrets.APP_DOMAIN }};
-              
-              # SSL configuration (Let's Encrypt)
-              ssl_certificate /etc/letsencrypt/live/${{ secrets.APP_DOMAIN }}/fullchain.pem;
-              ssl_certificate_key /etc/letsencrypt/live/${{ secrets.APP_DOMAIN }}/privkey.pem;
-              ssl_protocols TLSv1.2 TLSv1.3;
-              ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
-              ssl_prefer_server_ciphers off;
-              ssl_session_cache shared:SSL:10m;
-              ssl_session_timeout 10m;
-              
-              # Security headers
-              add_header X-Frame-Options DENY;
-              add_header X-Content-Type-Options nosniff;
-              add_header X-XSS-Protection "1; mode=block";
-              add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-              
-              # Gzip compression
-              gzip on;
-              gzip_vary on;
-              gzip_min_length 1024;
-              gzip_proxied any;
-              gzip_comp_level 6;
-              gzip_types
-                  text/plain
-                  text/css
-                  text/xml
-                  text/javascript
-                  application/json
-                  application/javascript
-                  application/xml+rss
-                  application/atom+xml
-                  image/svg+xml;
-              
-              # Proxy to Docker container
-              location / {
-                  proxy_pass http://localhost:3000;
-                  proxy_http_version 1.1;
-                  proxy_set_header Upgrade \$http_upgrade;
-                  proxy_set_header Connection 'upgrade';
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto \$scheme;
-                  proxy_cache_bypass \$http_upgrade;
-                  proxy_read_timeout 86400;
-              }
-              
-              # Static files caching
-              location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-                  proxy_pass http://localhost:3000;
-                  proxy_set_header Host \$host;
-                  proxy_set_header X-Real-IP \$remote_addr;
-                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto \$scheme;
-                  expires 1y;
-                  add_header Cache-Control "public, immutable";
-              }
-              
-              # Health check endpoint
-              location /health {
-                  access_log off;
-                  return 200 "healthy\n";
-                  add_header Content-Type text/plain;
-              }
-          }
-          EOF
-          
-          # Enable the site
-          sudo ln -sf $NGINX_CONFIG $NGINX_ENABLED
-          
-          # Test Nginx configuration
-          echo "🧪 Testing Nginx configuration..."
-          if sudo nginx -t; then
-            echo "✅ Nginx configuration is valid"
-          else
-            echo "❌ Nginx configuration is invalid"
-            exit 1
-          fi
-          
-          # Reload Nginx
-          echo "🔄 Reloading Nginx..."
-          sudo systemctl reload nginx
-          
-          echo "✅ Nginx configuration completed!"
+      echo "🔐 Logging into GitHub Container Registry..."
+      echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
 
-    - name: Setup SSL Certificate
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.CONTABO_HOST }}
-        username: ${{ secrets.CONTABO_USERNAME }}
-        key: ${{ secrets.CONTABO_SSH_KEY }}
-        port: ${{ secrets.CONTABO_PORT || 22 }}
-        script: |
-          echo "🔒 Setting up SSL certificate..."
-          
-          # Install certbot if not already installed
-          if ! command -v certbot &> /dev/null; then
-            echo "📦 Installing certbot..."
-            sudo apt update
-            sudo apt install -y certbot python3-certbot-nginx
-          fi
-          
-          # Check if certificate already exists
-          if [ -d "/etc/letsencrypt/live/${{ secrets.APP_DOMAIN }}" ]; then
-            echo "🔄 Renewing existing SSL certificate..."
-            sudo certbot renew --quiet
-          else
-            echo "🆕 Obtaining new SSL certificate..."
-            sudo certbot --nginx -d ${{ secrets.APP_DOMAIN }} --non-interactive --agree-tos --email ${{ secrets.ADMIN_EMAIL }}
-          fi
-          
-          # Setup automatic renewal
-          echo "⏰ Setting up automatic certificate renewal..."
-          (crontab -l 2>/dev/null; echo "0 12 * * * /usr/bin/certbot renew --quiet") | crontab -
-          
-          echo "✅ SSL certificate setup completed!"
+      echo "📥 Pulling latest Docker image: $DOCKER_IMAGE"
+      sudo docker pull "$DOCKER_IMAGE"
 
-    - name: Final Health Check
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.CONTABO_HOST }}
-        username: ${{ secrets.CONTABO_USERNAME }}
-        key: ${{ secrets.CONTABO_SSH_KEY }}
-        port: ${{ secrets.CONTABO_PORT || 22 }}
-        script: |
-          echo "🔍 Performing final health check..."
-          
-          # Wait a bit for everything to settle
-          sleep 10
-          
-          # Check if application is responding
-          if curl -f -s https://${{ secrets.APP_DOMAIN }} > /dev/null; then
-            echo "✅ Application is accessible via HTTPS!"
-          else
-            echo "❌ Application is not accessible via HTTPS"
-            echo "🔍 Checking HTTP fallback..."
-            if curl -f -s http://${{ secrets.APP_DOMAIN }} > /dev/null; then
-              echo "⚠️ Application is accessible via HTTP but not HTTPS"
-            else
-              echo "❌ Application is not accessible at all"
-              echo "📋 Container status:"
-              sudo docker-compose ps
-              echo "📋 Nginx status:"
-              sudo systemctl status nginx
-              exit 1
-            fi
-          fi
-          
-          echo "🎉 Deployment completed successfully!"
-          echo "🌐 Your application is now available at: https://${{ secrets.APP_DOMAIN }}"
+      echo "🛑 Stopping existing containers (if any)..."
+      sudo docker compose down || true
+
+      if [ ! -f docker-compose.yml ]; then
+        echo "📝 Creating docker-compose.yml..."
+        sudo tee docker-compose.yml > /dev/null <<'EOF'
+version: "3.8"
+services:
+  app:
+    image: REPLACE_IMAGE
+    container_name: raiken-app
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+      - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION}
+      - RAIKEN_ENABLE_AI_ANALYSIS=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+EOF
+      fi
+
+      sudo sed -i "s|image: REPLACE_IMAGE|image: $DOCKER_IMAGE|g" docker-compose.yml
+
+      export OPENROUTER_API_KEY='${{ secrets.OPENROUTER_API_KEY }}'
+      export NEXT_PUBLIC_BASE_URL='${{ secrets.NEXT_PUBLIC_BASE_URL }}'
+      export NEXT_PUBLIC_APP_VERSION='${{ github.sha }}'
+
+      echo "🚀 Starting application..."
+      sudo docker compose up -d
+
+      echo "⏳ Waiting for application to be ready..."
+      sleep 30
+
+      echo "🔍 Performing health check..."
+      if curl -f -s http://localhost:3000 > /dev/null; then
+        echo "✅ Application is healthy!"
+      else
+        echo "❌ Health check failed! Recent logs:"
+        sudo docker compose logs --tail=50
+        exit 1
+      fi
+
+      echo "🧹 Cleaning up old Docker images..."
+      sudo docker image prune -f
+
+      echo "🎉 Deployment completed successfully!"
+      echo "📊 Container status:"
+      sudo docker compose ps
+
+      echo "📋 Recent logs:"
+      sudo docker compose logs --tail=20
