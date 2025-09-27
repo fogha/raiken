@@ -155,7 +155,6 @@ jobs:
           port: ${{ secrets.CONTABO_PORT }}
           script: |
             set -e
-            # Resolve domain with bash fallback rather than GitHub `${{ a || b }}`
             APP_DOMAIN="${{ secrets.APP_DOMAIN }}"
             if [ -z "$APP_DOMAIN" ]; then APP_DOMAIN="raiken"; fi
 
