@@ -128,45 +128,45 @@ jobs:
             echo "🧹 Pruning old images..."
             sudo docker image prune -f
 
-       - name: Clean up old Nginx configs
-         uses: appleboy/ssh-action@v1.0.3
-         with:
-           host: ${{ secrets.CONTABO_HOST }}
-           username: ${{ secrets.CONTABO_USERNAME }}
-           key: ${{ secrets.CONTABO_SSH_KEY }}
-           port: ${{ secrets.CONTABO_PORT }}
-           script: |
-             set -e
-             echo "🧹 Cleaning up old Nginx configs..."
-             
-             # Remove all enabled sites to avoid SSL certificate errors
-             sudo rm -f /etc/nginx/sites-enabled/*
-             
-             # Test nginx config
-             sudo nginx -t
-             
-             # Reload nginx
-             sudo systemctl reload nginx
-             
-             echo "✅ Nginx cleaned up - app will run on localhost:3000"
+      - name: Clean up old Nginx configs
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_USERNAME }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          port: ${{ secrets.CONTABO_PORT }}
+          script: |
+            set -e
+            echo "🧹 Cleaning up old Nginx configs..."
+            
+            # Remove all enabled sites to avoid SSL certificate errors
+            sudo rm -f /etc/nginx/sites-enabled/*
+            
+            # Test nginx config
+            sudo nginx -t
+            
+            # Reload nginx
+            sudo systemctl reload nginx
+            
+            echo "✅ Nginx cleaned up - app will run on localhost:3000"
 
-       - name: Final health check
-         uses: appleboy/ssh-action@v1.0.3
-         with:
-           host: ${{ secrets.CONTABO_HOST }}
-           username: ${{ secrets.CONTABO_USERNAME }}
-           key: ${{ secrets.CONTABO_SSH_KEY }}
-           port: ${{ secrets.CONTABO_PORT }}
-           script: |
-             set -e
-             echo "🔍 Final health check..."
-             sleep 10
+      - name: Final health check
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_USERNAME }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          port: ${{ secrets.CONTABO_PORT }}
+          script: |
+            set -e
+            echo "🔍 Final health check..."
+            sleep 10
 
-             if curl -f -s "http://localhost:3000" > /dev/null; then
-               echo "✅ App running on localhost:3000"
-               echo "🌐 Access your app at: http://your-server-ip:3000"
-             else
-               echo "❌ App not accessible"
-               sudo docker compose ps || true
-               exit 1
-             fi
+            if curl -f -s "http://localhost:3000" > /dev/null; then
+              echo "✅ App running on localhost:3000"
+              echo "🌐 Access your app at: http://your-server-ip:3000"
+            else
+              echo "❌ App not accessible"
+              sudo docker compose ps || true
+              exit 1
+            fi
