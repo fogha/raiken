@@ -126,13 +126,13 @@ jobs:
             echo "⏳ Waiting for application to be ready..."
             sleep 30
             echo "🔍 Performing health check..."
-            if curl -f -s http://localhost:3000 > /dev/null; then
-              echo "✅ Application is healthy!"
-            } else {
-              echo "❌ Health check failed! Recent logs:"
-              sudo docker compose logs --tail=50
-              exit 1
-            fi
+             if curl -f -s http://localhost:3000 > /dev/null; then
+               echo "✅ Application is healthy!"
+             else
+               echo "❌ Health check failed! Recent logs:"
+               sudo docker compose logs --tail=50
+               exit 1
+             fi
 
             # Cleanup old images
             echo "🧹 Cleaning up old Docker images..."
