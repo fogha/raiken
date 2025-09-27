@@ -150,15 +150,6 @@ const TestsPage: React.FC<TestsPageProps> = ({ children }) => {
                             'Load URL'
                           )}
                         </Button>
-                        <Button 
-                          type="button" 
-                          onClick={handleExtractDOM} 
-                          disabled={isLoading} 
-                          variant="outline"
-                          className="whitespace-nowrap h-8"
-                        >
-                          Extract DOM
-                        </Button>
                       </form>
                     </div>
                     

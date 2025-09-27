@@ -1,27 +1,43 @@
+version: '3.8'
+
 services:
-  # Production Next.js application
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
+    container_name: raiken-app
+    restart: unless-stopped
     environment:
       - NODE_ENV=production
-    restart: unless-stopped
-
-  # Playwright testing
-  playwright:
-    build:
-      context: .
-      dockerfile: Dockerfile.playwright
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL}
+      - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-0.1.0}
+      - RAIKEN_ENABLE_AI_ANALYSIS=${RAIKEN_ENABLE_AI_ANALYSIS:-true}
+    ports:
+      - "3000:3000"
     volumes:
-      - ./generated-tests:/app/generated-tests
-      - ./test-results:/app/test-results
-      - ./playwright.config.ts:/app/playwright.config.ts
-    environment:
-      - NODE_ENV=test
-      - BASE_URL=http://host.docker.internal:3000
-    network_mode: host
-    profiles:
-      - test
+      - ./data:/app/data
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Add a database if needed
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: raiken-db
+  #   restart: unless-stopped
+  #   environment:
+  #     - POSTGRES_DB=raiken
+  #     - POSTGRES_USER=raiken
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+volumes:
+  postgres_data:

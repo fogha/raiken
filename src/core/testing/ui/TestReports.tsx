@@ -354,7 +354,6 @@ export function TestReports() {
                                 </p>
                                 <p className="text-xs text-purple-600 flex items-center gap-1">
                                   <span>🔍</span>
-                                  Click to view full size
                                 </p>
                               </div>
                             </div>

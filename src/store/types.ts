@@ -1,6 +1,7 @@
 import { DOMNode } from '@/types/dom';
 import { TestTab, TestScriptConfig } from '@/types/test';
-import { BrowserState, ViewportState } from '@/types/browser';
+import { ViewportState } from '@/types/browser';
+import { BrowserState } from './browserStore';
 
 // DOM state types
 export interface DOMState {

@@ -191,6 +191,13 @@ export class LocalFileSystemAdapter {
       // Always specify browser project to avoid running all browsers
       const browserType = config.browserType || 'chromium';
       args.push(`--project=${browserType}`);
+      
+      // Force single worker to prevent parallel execution
+      args.push('--workers=1');
+      
+      // Also add --grep to ensure we only run the specific test
+      const testName = path.basename(resolvedTestPath, '.spec.ts');
+      args.push(`--grep=${testName}`);
 
       console.log(`Executing: npx ${args.join(' ')}`);
       console.log(`Working directory: ${this.projectPath}`);

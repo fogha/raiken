@@ -44,6 +44,8 @@ next-env.d.ts
 .vscode
 
 # Generated test scripts and results
+/generated-tests/*
+/e2e/*
 /generated-tests/*.spec.ts
 /test-results/*.json
 /test-results/*

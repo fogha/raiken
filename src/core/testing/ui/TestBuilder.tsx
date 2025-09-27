@@ -27,7 +27,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     generateTest
   } = useTestStore();
 
-  const { setStatus } = useBrowserStore();
   const { addNotification } = useNotificationStore();
 
   // Local UI state
@@ -76,8 +75,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       return;
     }
 
-    setStatus('GENERATING_TEST', 'Generating test script...', 'loading');
-    
     try {
       await generateTest();
       
@@ -112,14 +109,17 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
         }
       }
 
-      setStatus('TEST_GENERATED', 'Test script generated successfully', 'success');
-      // Clear status after showing success briefly
-      setTimeout(() => {
-        const { clearStatus } = useBrowserStore.getState();
-        clearStatus();
-      }, 3000);
+      addNotification({
+        type: 'success',
+        title: 'Test Generated',
+        message: 'Test script generated successfully'
+      });
     } catch (error) {
-      setStatus('TEST_ERROR', `Test generation failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+      addNotification({
+        type: 'error',
+        title: 'Test Generation Failed',
+        message: error instanceof Error ? error.message : String(error)
+      });
     }
   };
 

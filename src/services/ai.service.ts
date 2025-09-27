@@ -44,7 +44,7 @@ export class AiService {
       throw new Error('AI service not available. Please configure OPENROUTER_API_KEY.');
     }
 
-    return this.openRouter.generateTestScript(prompt, domTree, url);
+    return this.openRouter.generateTestScript(prompt);
   }
 
   /**

@@ -2,7 +2,7 @@
  * Test Helper Utilities
  */
 
-import { TestTab, TestExecutionResult } from '@/types';
+import { TestTab, TestGenerationResult } from '@/types';
 
 /**
  * Generate unique test ID
@@ -123,7 +123,7 @@ export function formatExecutionTime(durationMs: number): string {
 /**
  * Parse test results for summary
  */
-export function parseTestResults(result: TestExecutionResult): {
+export function parseTestResults(result: TestGenerationResult): {
   totalTests: number;
   passedTests: number;
   failedTests: number;
@@ -143,19 +143,8 @@ export function parseTestResults(result: TestExecutionResult): {
     summary.failedTests = 1;
   }
   
-  // Try to parse more detailed results from rawOutput if available
-  if (result.results?.rawOutput) {
-    const output = result.results.rawOutput;
-    
-    // Look for Playwright test summary
-    const summaryMatch = output.match(/(\d+) passed.*?(\d+) failed.*?(\d+) skipped/);
-    if (summaryMatch) {
-      summary.passedTests = parseInt(summaryMatch[1]) || 0;
-      summary.failedTests = parseInt(summaryMatch[2]) || 0;
-      summary.skippedTests = parseInt(summaryMatch[3]) || 0;
-      summary.totalTests = summary.passedTests + summary.failedTests + summary.skippedTests;
-    }
-  }
+  // Note: TestGenerationResult doesn't include detailed test execution results
+  // This would need to be updated if more detailed result parsing is needed
   
   return summary;
 }
@@ -163,7 +152,7 @@ export function parseTestResults(result: TestExecutionResult): {
 /**
  * Generate test report summary
  */
-export function generateTestSummary(results: Map<string, TestExecutionResult>): {
+export function generateTestSummary(results: Map<string, TestGenerationResult>): {
   totalRuns: number;
   successfulRuns: number;
   failedRuns: number;
@@ -176,10 +165,8 @@ export function generateTestSummary(results: Map<string, TestExecutionResult>): 
     totalRuns: allResults.length,
     successfulRuns: allResults.filter(r => r.success).length,
     failedRuns: allResults.filter(r => !r.success).length,
-    totalDuration: allResults.reduce((sum, r) => sum + r.duration, 0),
-    averageDuration: allResults.length > 0 
-      ? allResults.reduce((sum, r) => sum + r.duration, 0) / allResults.length 
-      : 0
+    totalDuration: 0, // TestGenerationResult doesn't include duration
+    averageDuration: 0 // TestGenerationResult doesn't include duration
   };
 }
 
@@ -230,12 +217,13 @@ function extractTestSteps(script: string): Array<{ action: string; target?: stri
   ];
   
   for (const { pattern, action } of actionPatterns) {
-    const matches = script.matchAll(new RegExp(pattern.source, 'g'));
-    for (const match of matches) {
+    const regex = new RegExp(pattern.source, 'g');
+    let match;
+    while ((match = regex.exec(script)) !== null) {
       steps.push({
         action,
         target: match[1],
-        value: match[2]
+        value: match[2] || ''
       });
     }
   }

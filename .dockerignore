@@ -79,6 +79,7 @@ CHANGELOG.md
 
 # Examples
 examples/
+examples/**
 
 # CLI related
 cli/

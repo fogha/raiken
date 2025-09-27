@@ -4,7 +4,7 @@
 
 import { ReactNode } from 'react';
 import { DOMNode } from './dom';
-import { TestTab, TestExecutionResult } from './test';
+import { TestTab, TestGenerationResult } from './test';
 
 // Layout Component Props
 
@@ -45,7 +45,7 @@ export interface TabbedTestEditorProps {
 }
 
 export interface TestReportsProps {
-  results?: Map<string, TestExecutionResult>;
+  results?: Map<string, TestGenerationResult>;
   className?: string;
 }
 

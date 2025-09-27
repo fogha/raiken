@@ -13,7 +13,7 @@ interface TestTab {
   error?: string;
 }
 
-interface BrowserState {
+export interface BrowserState {
   // Browser state
   url: string | null;
   isLoading: boolean;

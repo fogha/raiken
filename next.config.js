@@ -3,6 +3,13 @@ const nextConfig = {
   // Enable standalone build for Docker
   output: 'standalone',
   
+  // Exclude examples directory from build
+  experimental: {
+    outputFileTracingExcludes: {
+      '*': ['./examples/**/*'],
+    },
+  },
+  
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -18,6 +25,13 @@ const nextConfig = {
         type: 'asset/resource',
       });
     }
+    
+    // Exclude examples from webpack compilation
+    config.watchOptions = {
+      ...config.watchOptions,
+      ignored: ['**/examples/**', '**/node_modules/**'],
+    };
+    
     return config;
   },
 };

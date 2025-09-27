@@ -78,6 +78,7 @@ interface TestExecutionResult {
 export class TestSuiteManager {
   private testSuites = new Map<string, TestSuiteConfig>();
   private configCleanupTimeout = 30 * 60 * 1000; // 30 minutes
+  private reportsService = testReportsService;
 
   /**
    * Parse Playwright error output to extract structured debugging information
@@ -753,14 +754,14 @@ export class TestSuiteManager {
             const testScript = await fs.readFile(path.resolve(process.cwd(), execution.testPath), 'utf8');
             
             const savedReport = await this.reportsService.saveReport({
-              timestamp: new Date().toISOString(),
+              testName: path.basename(execution.testPath, '.spec.ts'),
               testPath: execution.testPath,
-              testScript,
-              rawPlaywrightOutput: stdout,
-              rawPlaywrightError: stderr,
               exitCode: error.code || 1,
-              durationMs: duration,
-              status: 'failure'
+              duration: duration,
+              rawOutput: stdout,
+              rawError: stderr,
+              summary: 'Test execution failed',
+              suggestions: 'Check the error output for debugging information'
             });
             
             summary = savedReport.summary;

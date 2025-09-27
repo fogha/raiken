@@ -4,5 +4,3 @@
 
 export * from './utils';
 export * from './local-bridge';
-export * from './event-emitter';
-export * from './logger';
