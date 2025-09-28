@@ -63,24 +63,20 @@ jobs:
             set -euo pipefail
 
             APP_DIR="/opt/raiken"
-            DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
-
             cd "$APP_DIR"
 
-            # Update the app service image tag in compose (idempotent)
-            # Only touches lines that start with 'image:' under indentation
-            sudo sed -i "0,/^[[:space:]]*image:[[:space:]].*/s//    image: ${DOCKER_IMAGE}/" docker-compose.yml
-
-            # Optional GHCR auth on the server for private pulls
+            # Optional GHCR auth on the server for private images
             if [ -n "${{ secrets.GHCR_READ_USERNAME }}" ] && [ -n "${{ secrets.GHCR_READ_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
+              echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
             fi
 
-            # Pull & restart quietly
-            sudo docker compose pull >/dev/null
+            # Pull only the 'app' service image (compose must already reference ghcr.io/fogha/raiken:latest)
+            sudo docker compose pull app >/dev/null
+
+            # Start/refresh stack
             sudo docker compose up -d
 
-            # Health checks (print logs only on failure)
+            # Health checks (quiet; print logs only on failure)
             for i in $(seq 1 10); do
               if curl -fsS http://localhost:3000 >/dev/null && curl -fsS http://localhost:3001/health >/dev/null; then
                 ok=1; break
@@ -95,7 +91,6 @@ jobs:
             fi
 
       - name: Nginx reload (optional)
-        if: always()
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CONTABO_HOST }}

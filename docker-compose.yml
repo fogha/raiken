@@ -1,6 +1,8 @@
+version: "3.8"
+
 services:
   app:
-    image: ghcr.io/fogha/raiken:latest
+    image: ghcr.io/fogha/raiken:latest  # built & pushed by GitHub Actions
     container_name: raiken-app
     restart: unless-stopped
     environment:
@@ -8,7 +10,7 @@ services:
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:?missing}
       - NEXT_PUBLIC_BASE_URL=${NEXT_PUBLIC_BASE_URL:?missing}
       - NEXT_PUBLIC_APP_VERSION=${NEXT_PUBLIC_APP_VERSION:-local}
-      - RAIKEN_ENABLE_AI_ANALYSIS=true
+      - RAIKEN_ENABLE_AI_ANALYSIS=${RAIKEN_ENABLE_AI_ANALYSIS:-true}
       - NEXT_PUBLIC_RELAY_URL=ws://${RELAY_HOST:-84.46.245.248}:3001/bridge
     ports:
       - "3000:3000"
@@ -22,7 +24,8 @@ services:
       retries: 3
       start_period: 40s
     depends_on:
-      - relay
+      relay:
+        condition: service_healthy
 
   relay:
     image: node:18-alpine
@@ -35,7 +38,7 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      # relay-server.js must exist alongside this compose file on the server
+      # Ensure relay-server.js is present alongside this compose file on the server
       - ./relay-server.js:/app/relay-server.js:ro
     command: ["sh", "-c", "apk add --no-cache wget >/dev/null 2>&1 && npm install ws@^8 --silent && node relay-server.js"]
     healthcheck:
