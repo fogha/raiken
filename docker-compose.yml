@@ -1,8 +1,7 @@
 version: "3.8"
-
 services:
   app:
-    image: ghcr.io/fogha/raiken:latest  # built & pushed by GitHub Actions
+    image: ghcr.io/fogha/raiken:latest  # built & pushed by the workflow
     container_name: raiken-app
     restart: unless-stopped
     environment:
@@ -38,8 +37,9 @@ services:
     ports:
       - "3001:3001"
     volumes:
-      # Ensure relay-server.js is present alongside this compose file on the server
+      # Ensure this file exists on the server next to docker-compose.yml
       - ./relay-server.js:/app/relay-server.js:ro
+    # Install 'ws' on start, then run the relay (keeps workflow building only the app)
     command: ["sh", "-c", "apk add --no-cache wget >/dev/null 2>&1 && npm install ws@^8 --silent && node relay-server.js"]
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
