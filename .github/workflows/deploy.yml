@@ -52,6 +52,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      # Upload repo-root compose + relay-server.js to the server
+      - name: Upload compose and relay
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.CONTABO_HOST }}
+          username: ${{ secrets.CONTABO_USERNAME }}
+          key: ${{ secrets.CONTABO_SSH_KEY }}
+          port: ${{ secrets.CONTABO_PORT }}
+          source: "docker-compose.yml,relay-server.js"
+          target: "/opt/raiken/"
+          overwrite: true
+
       - name: Deploy (pull & up -d)
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -65,35 +77,32 @@ jobs:
             APP_DIR="/opt/raiken"
             cd "$APP_DIR"
 
-            # If your GHCR package is private, we require these two secrets.
-            # If it's public, you may delete this login section.
-            if [ -z "${{ secrets.GHCR_READ_USERNAME }}" ] || [ -z "${{ secrets.GHCR_READ_TOKEN }}" ]; then
-              echo "GHCR_READ_USERNAME / GHCR_READ_TOKEN not set. Either:"
-              echo "  - Make ghcr.io/fogha/raiken public, OR"
-              echo "  - Add GHCR_READ_USERNAME and GHCR_READ_TOKEN (PAT with read:packages) to repo secrets."
-              exit 1
+            # GHCR login if provided (required for private images)
+            if [ -n "${{ secrets.GHCR_READ_USERNAME }}" ] && [ -n "${{ secrets.GHCR_READ_TOKEN }}" ]; then
+              echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
             fi
-            echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
 
-            # Pull only the app service image (compose must reference ghcr.io/fogha/raiken:latest)
-            sudo docker compose pull app >/dev/null
+            # Pull app image (relay uses node:alpine)
+            sudo docker compose pull app >/dev/null || true
 
-            # Start/refresh stack quietly
-            sudo docker compose up -d
+            # Start/refresh stack; remove orphans if previous compose lacked relay
+            sudo docker compose up -d --remove-orphans
 
             # Health checks (quiet; show logs only on failure)
             for i in $(seq 1 10); do
-              if curl -fsS http://localhost:3000 >/dev/null && curl -fsS http://localhost:3001/health >/dev/null; then
-                ok=1; break
+              app_ok=0 relay_ok=0
+              curl -fsS http://localhost:3000 >/dev/null && app_ok=1 || true
+              curl -fsS http://localhost:3001/health >/dev/null && relay_ok=1 || true
+              if [ $app_ok -eq 1 ] && [ $relay_ok -eq 1 ]; then
+                exit 0
               fi
               sleep 3
             done
-            if [ "${ok:-0}" -ne 1 ]; then
-              sudo docker compose ps
-              sudo docker compose logs app --tail=120 || true
-              sudo docker compose logs relay --tail=120 || true
-              exit 1
-            fi
+
+            sudo docker compose ps
+            sudo docker compose logs app --tail=120 || true
+            sudo docker compose logs relay --tail=120 || true
+            exit 1
 
       - name: Nginx reload (optional)
         uses: appleboy/ssh-action@v1.0.3
