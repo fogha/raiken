@@ -52,8 +52,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Upload repo-root compose + relay-server.js to the server
-      - name: Upload compose and relay
+      - name: Upload compose & relay to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.CONTABO_HOST }}
@@ -64,7 +63,7 @@ jobs:
           target: "/opt/raiken/"
           overwrite: true
 
-      - name: Deploy (pull & up -d)
+      - name: Deploy (create .env, pull & up -d)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CONTABO_HOST }}
@@ -73,22 +72,32 @@ jobs:
           port: ${{ secrets.CONTABO_PORT }}
           script: |
             set -euo pipefail
-
             APP_DIR="/opt/raiken"
             cd "$APP_DIR"
 
-            # GHCR login if provided (required for private images)
+            # Write .env for compose (masked in logs by GitHub)
+            sudo install -d -m 0755 "$APP_DIR"
+            sudo bash -c 'cat > .env' <<'ENV_EOF'
+            OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
+            NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL }}
+            NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
+            RAIKEN_ENABLE_AI_ANALYSIS=${{ secrets.RAIKEN_ENABLE_AI_ANALYSIS || 'true' }}
+            RELAY_HOST=${{ secrets.RELAY_HOST || '84.46.245.248' }}
+            ENV_EOF
+            sudo chmod 600 .env
+
+            # GHCR login for private images (optional if package is public)
             if [ -n "${{ secrets.GHCR_READ_USERNAME }}" ] && [ -n "${{ secrets.GHCR_READ_TOKEN }}" ]; then
               echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
             fi
 
-            # Pull app image (relay uses node:alpine)
+            # Pull only app image; relay uses node:alpine base
             sudo docker compose pull app >/dev/null || true
 
-            # Start/refresh stack; remove orphans if previous compose lacked relay
+            # Start/refresh; remove orphans if relay was missing previously
             sudo docker compose up -d --remove-orphans
 
-            # Health checks (quiet; show logs only on failure)
+            # Health checks (quiet; print logs only on failure)
             for i in $(seq 1 10); do
               app_ok=0 relay_ok=0
               curl -fsS http://localhost:3000 >/dev/null && app_ok=1 || true
@@ -98,7 +107,6 @@ jobs:
               fi
               sleep 3
             done
-
             sudo docker compose ps
             sudo docker compose logs app --tail=120 || true
             sudo docker compose logs relay --tail=120 || true
