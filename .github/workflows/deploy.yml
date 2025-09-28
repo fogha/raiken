@@ -25,14 +25,14 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GHCR
+      - name: Log in to GHCR (builder)
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
+      - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -65,18 +65,23 @@ jobs:
             APP_DIR="/opt/raiken"
             cd "$APP_DIR"
 
-            # Optional GHCR auth on the server for private images
-            if [ -n "${{ secrets.GHCR_READ_USERNAME }}" ] && [ -n "${{ secrets.GHCR_READ_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
+            # If your GHCR package is private, we require these two secrets.
+            # If it's public, you may delete this login section.
+            if [ -z "${{ secrets.GHCR_READ_USERNAME }}" ] || [ -z "${{ secrets.GHCR_READ_TOKEN }}" ]; then
+              echo "GHCR_READ_USERNAME / GHCR_READ_TOKEN not set. Either:"
+              echo "  - Make ghcr.io/fogha/raiken public, OR"
+              echo "  - Add GHCR_READ_USERNAME and GHCR_READ_TOKEN (PAT with read:packages) to repo secrets."
+              exit 1
             fi
+            echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
 
-            # Pull only the 'app' service image (compose must already reference ghcr.io/fogha/raiken:latest)
+            # Pull only the app service image (compose must reference ghcr.io/fogha/raiken:latest)
             sudo docker compose pull app >/dev/null
 
-            # Start/refresh stack
+            # Start/refresh stack quietly
             sudo docker compose up -d
 
-            # Health checks (quiet; print logs only on failure)
+            # Health checks (quiet; show logs only on failure)
             for i in $(seq 1 10); do
               if curl -fsS http://localhost:3000 >/dev/null && curl -fsS http://localhost:3001/health >/dev/null; then
                 ok=1; break
