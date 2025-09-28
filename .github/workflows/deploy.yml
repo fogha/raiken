@@ -8,6 +8,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  IMAGE_TAG: latest
 
 jobs:
   build-and-deploy:
@@ -16,16 +17,15 @@ jobs:
       contents: read
       packages: write
       id-token: write
-      security-events: write
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -38,11 +38,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=${{ env.IMAGE_TAG }}
+            type=sha,prefix=main-
 
-      - name: Build and push Docker image
+      - name: Build & push app image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -53,7 +52,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy application (Docker Compose)
+      - name: Deploy (pull & up -d)
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CONTABO_HOST }}
@@ -61,166 +60,42 @@ jobs:
           key: ${{ secrets.CONTABO_SSH_KEY }}
           port: ${{ secrets.CONTABO_PORT }}
           script: |
-            set -e
+            set -euo pipefail
 
-            APP_NAME="raiken"
-            APP_DIR="/opt/$APP_NAME"
-            DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+            APP_DIR="/opt/raiken"
+            DOCKER_IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
 
-            echo "🚀 Deploying $APP_NAME ..."
-            sudo mkdir -p "$APP_DIR"
             cd "$APP_DIR"
 
-            echo "🔐 Logging into GHCR..."
-            echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+            # Update the app service image tag in compose (idempotent)
+            # Only touches lines that start with 'image:' under indentation
+            sudo sed -i "0,/^[[:space:]]*image:[[:space:]].*/s//    image: ${DOCKER_IMAGE}/" docker-compose.yml
 
-            echo "📥 Pulling image: $DOCKER_IMAGE"
-            sudo docker pull "$DOCKER_IMAGE"
-
-            echo "🛑 Bringing down current stack (if any)"
-            sudo docker compose down || true
-
-            echo "📁 Copying relay server..."
-            if [ ! -f relay-server.js ]; then
-              sudo tee relay-server.js > /dev/null <<'RELAY_EOF'
-            #!/usr/bin/env node
-            const WebSocket = require('ws');
-            const http = require('http');
-            const url = require('url');
-            const PORT = process.env.RELAY_PORT || 3001;
-            const sessions = new Map();
-            const server = http.createServer((req, res) => {
-              if (req.url === '/health') {
-                res.writeHead(200, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ status: 'ok', sessions: sessions.size, timestamp: new Date().toISOString() }));
-                return;
-              }
-              res.writeHead(200, { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'text/plain' });
-              res.end('Raiken Relay Server\\nActive sessions: ' + sessions.size);
-            });
-            const wss = new WebSocket.Server({ server, path: '/bridge' });
-            wss.on('connection', (ws, req) => {
-              const query = url.parse(req.url, true).query;
-              const role = query.role;
-              const sessionId = query.session;
-              console.log(\`[\${new Date().toISOString()}] New \${role} connection for session: \${sessionId}\`);
-              if (!sessionId || !role || !['web', 'cli'].includes(role)) {
-                ws.close(1008, 'Invalid parameters');
-                return;
-              }
-              let session = sessions.get(sessionId);
-              if (!session) { session = {}; sessions.set(sessionId, session); }
-              session[role] = ws;
-              ws.on('message', (data) => {
-                try {
-                  const message = JSON.parse(data.toString());
-                  const targetRole = role === 'web' ? 'cli' : 'web';
-                  const targetWs = session[targetRole];
-                  if (targetWs && targetWs.readyState === WebSocket.OPEN) {
-                    targetWs.send(data);
-                  } else if (message.type === 'rpc' && message.id) {
-                    ws.send(JSON.stringify({ id: message.id, type: 'rpc', error: \`No \${targetRole} connection available\` }));
-                  }
-                } catch (error) { console.error('Error handling message:', error); }
-              });
-              ws.on('close', () => {
-                if (session && session[role] === ws) {
-                  delete session[role];
-                  if (Object.keys(session).length === 0) sessions.delete(sessionId);
-                }
-              });
-              ws.send(JSON.stringify({ type: 'welcome', role, sessionId, timestamp: Date.now() }));
-            });
-            server.listen(PORT, '0.0.0.0', () => {
-              console.log(\`🌐 Raiken Relay Server running on port \${PORT}\`);
-            });
-            RELAY_EOF
-              sudo chmod +x relay-server.js
+            # Optional GHCR auth on the server for private pulls
+            if [ -n "${{ secrets.GHCR_READ_USERNAME }}" ] && [ -n "${{ secrets.GHCR_READ_TOKEN }}" ]; then
+              echo "${{ secrets.GHCR_READ_TOKEN }}" | sudo docker login ${{ env.REGISTRY }} -u "${{ secrets.GHCR_READ_USERNAME }}" --password-stdin
             fi
 
-            if [ ! -f docker-compose.yml ]; then
-              echo "📝 Creating docker-compose.yml..."
-              sudo tee docker-compose.yml > /dev/null <<EOF
-            version: '3.8'
-            services:
-              app:
-                image: $DOCKER_IMAGE
-                container_name: ${APP_NAME}-app
-                restart: unless-stopped
-                environment:
-                  - NODE_ENV=production
-                  - OPENROUTER_API_KEY=${{ secrets.OPENROUTER_API_KEY }}
-                  - NEXT_PUBLIC_BASE_URL=${{ secrets.NEXT_PUBLIC_BASE_URL }}
-                  - NEXT_PUBLIC_APP_VERSION=${{ github.sha }}
-                  - RAIKEN_ENABLE_AI_ANALYSIS=true
-                  - NEXT_PUBLIC_RELAY_URL=ws://84.46.245.248:3001/bridge
-                ports:
-                  - "3000:3000"
-                volumes:
-                  - ./data:/app/data
-                  - ./logs:/app/logs
-                healthcheck:
-                  test: ["CMD", "curl", "-f", "http://localhost:3000"]
-                  interval: 30s
-                  timeout: 10s
-                  retries: 3
-                  start_period: 40s
-                depends_on:
-                  - relay
-              
-              relay:
-                image: node:18-alpine
-                container_name: ${APP_NAME}-relay
-                restart: unless-stopped
-                working_dir: /app
-                environment:
-                  - NODE_ENV=production
-                  - RELAY_PORT=3001
-                ports:
-                  - "3001:3001"
-                volumes:
-                  - ./relay-server.js:/app/relay-server.js:ro
-                command: ["node", "relay-server.js"]
-                healthcheck:
-                  test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/health"]
-                  interval: 30s
-                  timeout: 10s
-                  retries: 3
-                  start_period: 10s
-            EOF
-            fi
-
-            # Ensure the image line is current (idempotent)
-            sudo sed -i "s|^\s*image:\s*.*|    image: $DOCKER_IMAGE|g" docker-compose.yml
-
-            echo "⬆️  Starting app stack..."
+            # Pull & restart quietly
+            sudo docker compose pull >/dev/null
             sudo docker compose up -d
 
-            echo "⏳ Waiting for services..."
-            sleep 30
-            
-            # Check main app
-            if curl -f -s http://localhost:3000 > /dev/null; then
-              echo "✅ Main app is healthy on http://localhost:3000"
-            else
-              echo "❌ Main app health check failed; recent logs:"
-              sudo docker compose logs app --tail=50
-              exit 1
-            fi
-            
-            # Check relay server
-            if curl -f -s http://localhost:3001/health > /dev/null; then
-              echo "✅ Relay server is healthy on http://localhost:3001"
-            else
-              echo "❌ Relay server health check failed; recent logs:"
-              sudo docker compose logs relay --tail=50
+            # Health checks (print logs only on failure)
+            for i in $(seq 1 10); do
+              if curl -fsS http://localhost:3000 >/dev/null && curl -fsS http://localhost:3001/health >/dev/null; then
+                ok=1; break
+              fi
+              sleep 3
+            done
+            if [ "${ok:-0}" -ne 1 ]; then
+              sudo docker compose ps
+              sudo docker compose logs app --tail=120 || true
+              sudo docker compose logs relay --tail=120 || true
               exit 1
             fi
 
-            echo "🧹 Pruning old images..."
-            sudo docker image prune -f
-
-      - name: Clean up old Nginx configs
+      - name: Nginx reload (optional)
+        if: always()
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.CONTABO_HOST }}
@@ -228,46 +103,6 @@ jobs:
           key: ${{ secrets.CONTABO_SSH_KEY }}
           port: ${{ secrets.CONTABO_PORT }}
           script: |
-            set -e
-            echo "🧹 Cleaning up old Nginx configs..."
-            
-            # Remove all enabled sites to avoid SSL certificate errors
-            sudo rm -f /etc/nginx/sites-enabled/*
-            
-            # Test nginx config
+            set -euo pipefail
             sudo nginx -t
-            
-            # Reload nginx
             sudo systemctl reload nginx
-            
-            echo "✅ Nginx cleaned up - app will run on localhost:3000"
-
-      - name: Final health check
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.CONTABO_HOST }}
-          username: ${{ secrets.CONTABO_USERNAME }}
-          key: ${{ secrets.CONTABO_SSH_KEY }}
-          port: ${{ secrets.CONTABO_PORT }}
-          script: |
-            set -e
-            echo "🔍 Final health check..."
-            sleep 10
-
-            if curl -f -s "http://localhost:3000" > /dev/null; then
-              echo "✅ Main app running on localhost:3000"
-              echo "🌐 Access your app at: http://84.46.245.248:3000"
-            else
-              echo "❌ Main app not accessible"
-              sudo docker compose ps || true
-              exit 1
-            fi
-            
-            if curl -f -s "http://localhost:3001/health" > /dev/null; then
-              echo "✅ Relay server running on localhost:3001"
-              echo "🔗 Bridge relay available at: ws://84.46.245.248:3001/bridge"
-            else
-              echo "❌ Relay server not accessible"
-              sudo docker compose ps || true
-              exit 1
-            fi
