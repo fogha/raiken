@@ -30,7 +30,7 @@ export class AIService {
 
   async analyzeTestFailure(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     if (!this.apiKey) {
-      console.warn('⚠️ OPENROUTER_API_KEY not found. Skipping AI analysis.');
+      console.warn('OPENROUTER_API_KEY not found. Skipping AI analysis.');
       return {
         summary: 'AI analysis unavailable - API key not configured',
         suggestions: 'Configure OPENROUTER_API_KEY environment variable to enable AI-powered test failure analysis',
@@ -145,67 +145,85 @@ Focus on being specific rather than generic. If you see timeout errors, mention 
     const analysis = [];
     const combinedOutput = `${rawOutput}\n${rawError}`.toLowerCase();
 
-    // Check for common Playwright issues
-    if (combinedOutput.includes('timeout') || combinedOutput.includes('timed out')) {
-      const timeoutMatch = rawOutput.match(/timeout (\d+)ms/i) || rawError.match(/timeout (\d+)ms/i);
-      const timeout = timeoutMatch ? timeoutMatch[1] : 'unknown';
-      analysis.push(`🕐 TIMEOUT DETECTED: Test timed out (${timeout}ms timeout configured)`);
-    }
+    const patterns = [
+      {
+        condition: () => combinedOutput.includes('timeout') || combinedOutput.includes('timed out'),
+        getMessage: () => {
+          const timeoutMatch = rawOutput.match(/timeout (\d+)ms/i) || rawError.match(/timeout (\d+)ms/i);
+          const timeout = timeoutMatch ? timeoutMatch[1] : 'unknown';
+          return `TIMEOUT DETECTED: Test timed out (${timeout}ms timeout configured)`;
+        }
+      },
+      {
+        condition: () => combinedOutput.includes('element not found') || combinedOutput.includes('no such element'),
+        getMessage: () => {
+          const selectorMatch = rawOutput.match(/locator\(['"`]([^'"`]+)['"`]\)/i) || rawError.match(/locator\(['"`]([^'"`]+)['"`]\)/i);
+          const selector = selectorMatch ? selectorMatch[1] : 'unknown selector';
+          return `ELEMENT NOT FOUND: Cannot locate element with selector: ${selector}`;
+        }
+      },
+      {
+        condition: () => combinedOutput.includes('no tests found'),
+        getMessage: () => 'NO TESTS FOUND: Playwright cannot find any test files matching the pattern'
+      },
+      {
+        condition: () => combinedOutput.includes('network error') || combinedOutput.includes('net::err'),
+        getMessage: () => {
+          const networkMatch = rawOutput.match(/net::err_([a-z_]+)/i) || rawError.match(/net::err_([a-z_]+)/i);
+          const networkError = networkMatch ? networkMatch[1] : 'unknown';
+          return `NETWORK ERROR: ${networkError.replace(/_/g, ' ')}`;
+        }
+      },
+      {
+        condition: () => combinedOutput.includes('page crashed') || combinedOutput.includes('browser crashed'),
+        getMessage: () => 'BROWSER CRASH: The browser or page crashed during test execution'
+      },
+      {
+        condition: () => combinedOutput.includes('permission denied') || combinedOutput.includes('access denied'),
+        getMessage: () => 'PERMISSION ERROR: Access denied - check file permissions or security settings'
+      },
+      {
+        condition: () => combinedOutput.includes('connection refused') || combinedOutput.includes('econnrefused'),
+        getMessage: () => {
+          const urlMatch = rawOutput.match(/https?:\/\/[^\s]+/i) || rawError.match(/https?:\/\/[^\s]+/i);
+          const url = urlMatch ? urlMatch[0] : 'target server';
+          return `CONNECTION REFUSED: Cannot connect to ${url}`;
+        }
+      },
+      {
+        condition: () => combinedOutput.includes('screenshot') || combinedOutput.includes('video'),
+        getMessage: () => 'ARTIFACTS AVAILABLE: Screenshots and/or videos were captured for debugging'
+      },
+      {
+        condition: () => {
+          const statusMatch = rawOutput.match(/(\d{3})\s+(error|failed)/i) || rawError.match(/(\d{3})\s+(error|failed)/i);
+          return !!statusMatch;
+        },
+        getMessage: () => {
+          const statusMatch = rawOutput.match(/(\d{3})\s+(error|failed)/i) || rawError.match(/(\d{3})\s+(error|failed)/i);
+          const status = statusMatch ? statusMatch[1] : 'unknown';
+          return `HTTP ERROR: Received ${status} status code`;
+        }
+      },
+      {
+        condition: () => combinedOutput.includes('javascript error') || combinedOutput.includes('uncaught exception'),
+        getMessage: () => 'JAVASCRIPT ERROR: Page JavaScript error detected'
+      },
+      {
+        condition: () => combinedOutput.includes('config') && combinedOutput.includes('invalid'),
+        getMessage: () => 'CONFIGURATION ERROR: Invalid Playwright configuration detected'
+      }
+    ];
 
-    if (combinedOutput.includes('element not found') || combinedOutput.includes('no such element')) {
-      const selectorMatch = rawOutput.match(/locator\(['"`]([^'"`]+)['"`]\)/i) || rawError.match(/locator\(['"`]([^'"`]+)['"`]\)/i);
-      const selector = selectorMatch ? selectorMatch[1] : 'unknown selector';
-      analysis.push(`🎯 ELEMENT NOT FOUND: Cannot locate element with selector: ${selector}`);
-    }
-
-    if (combinedOutput.includes('no tests found')) {
-      analysis.push(`📁 NO TESTS FOUND: Playwright cannot find any test files matching the pattern`);
-    }
-
-    if (combinedOutput.includes('network error') || combinedOutput.includes('net::err')) {
-      const networkMatch = rawOutput.match(/net::err_([a-z_]+)/i) || rawError.match(/net::err_([a-z_]+)/i);
-      const networkError = networkMatch ? networkMatch[1] : 'unknown';
-      analysis.push(`🌐 NETWORK ERROR: ${networkError.replace(/_/g, ' ')}`);
-    }
-
-    if (combinedOutput.includes('page crashed') || combinedOutput.includes('browser crashed')) {
-      analysis.push(`💥 BROWSER CRASH: The browser or page crashed during test execution`);
-    }
-
-    if (combinedOutput.includes('permission denied') || combinedOutput.includes('access denied')) {
-      analysis.push(`🔒 PERMISSION ERROR: Access denied - check file permissions or security settings`);
-    }
-
-    if (combinedOutput.includes('connection refused') || combinedOutput.includes('econnrefused')) {
-      const urlMatch = rawOutput.match(/https?:\/\/[^\s]+/i) || rawError.match(/https?:\/\/[^\s]+/i);
-      const url = urlMatch ? urlMatch[0] : 'target server';
-      analysis.push(`🔌 CONNECTION REFUSED: Cannot connect to ${url}`);
-    }
-
-    if (combinedOutput.includes('screenshot') || combinedOutput.includes('video')) {
-      analysis.push(`📸 ARTIFACTS AVAILABLE: Screenshots and/or videos were captured for debugging`);
-    }
-
-    // Check for specific HTTP status codes
-    const statusMatch = rawOutput.match(/(\d{3})\s+(error|failed)/i) || rawError.match(/(\d{3})\s+(error|failed)/i);
-    if (statusMatch) {
-      const status = statusMatch[1];
-      analysis.push(`🌐 HTTP ERROR: Received ${status} status code`);
-    }
-
-    // Check for JavaScript errors
-    if (combinedOutput.includes('javascript error') || combinedOutput.includes('uncaught exception')) {
-      analysis.push(`⚠️ JAVASCRIPT ERROR: Page JavaScript error detected`);
-    }
-
-    // Check for configuration issues
-    if (combinedOutput.includes('config') && combinedOutput.includes('invalid')) {
-      analysis.push(`⚙️ CONFIGURATION ERROR: Invalid Playwright configuration detected`);
+    for (const pattern of patterns) {
+      if (pattern.condition()) {
+        analysis.push(pattern.getMessage());
+      }
     }
 
     return analysis.length > 0 
       ? analysis.join('\n') 
-      : '❓ GENERAL FAILURE: No specific error patterns detected in output';
+      : 'GENERAL FAILURE: No specific error patterns detected in output';
   }
 
   private parseAIResponse(aiResponse: string): AIAnalysisResponse {

@@ -19,9 +19,8 @@ interface RemoteServerOptions {
 export async function startRemoteServer(options: RemoteServerOptions): Promise<void> {
   const { port: requestedPort, projectPath, projectInfo, relayMode, relayUrl, sessionId } = options;
 
-  // If relay mode is requested, start relay client instead
   if (relayMode && relayUrl && sessionId) {
-    console.log(chalk.blue('🌐 Starting in relay mode...'));
+    console.log(chalk.blue('Starting in relay mode...'));
     
     const relayClient = new RelayClient({
       relayUrl,
@@ -32,49 +31,29 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
 
     const connected = await relayClient.connect();
     if (connected) {
-      console.log(chalk.green('✓ Relay client connected successfully'));
-      console.log(chalk.blue(`  Session ID: ${sessionId}`));
-      console.log(chalk.cyan('💡 Share this session ID with your web app to connect'));
+      console.log(chalk.green('Relay client connected successfully'));
+      console.log(chalk.blue(`Session ID: ${sessionId}`));
+      console.log(chalk.cyan('Share this session ID with your web app to connect'));
       
-      // Keep the process alive
       process.on('SIGINT', () => {
-        console.log(chalk.yellow('\n⚠ Shutting down relay client...'));
+        console.log(chalk.yellow('\nShutting down relay client...'));
         relayClient.disconnect();
         process.exit(0);
       });
       
       return;
     } else {
-      console.log(chalk.red('❌ Failed to connect to relay server'));
-      console.log(chalk.yellow('🔄 Falling back to local HTTP server mode...'));
+      console.log(chalk.red('Failed to connect to relay server'));
+      console.log(chalk.yellow('Falling back to local HTTP server mode...'));
     }
   }
 
-  // Find an available port with explicit fallback logic
-  let availablePort = await detectPort(requestedPort);
-  
-  // If the requested port is not available, try sequential ports
-  if (availablePort !== requestedPort) {
-    console.log(chalk.yellow(`Port ${requestedPort} is busy, trying fallback ports...`));
-    
-    // Try ports 3460, 3461, 3462, etc.
-    const basePort = 3460;
-    for (let i = 0; i < 10; i++) {
-      const tryPort = basePort + i;
-      const testPort = await detectPort(tryPort);
-      if (testPort === tryPort) {
-        availablePort = tryPort;
-        console.log(chalk.green(`✓ Using port ${availablePort}`));
-        break;
-      }
-    }
-    
-    if (availablePort !== requestedPort) {
-      console.log(chalk.yellow(`Using port ${availablePort} (fallback from ${requestedPort})`));
-    }
-  }
+  const availablePort = await findAvailablePort(requestedPort);
 
   const app = express();
+
+  setupGlobalErrorHandling();
+  setupRequestTimeout(app);
 
   // CORS configuration for hosted platform
   const allowedOrigins = [
@@ -105,7 +84,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        console.log(`${chalk.yellow('⚠️ CORS blocked origin:')} ${origin}`);
+        console.log(`${chalk.yellow('CORS blocked origin:')} ${origin}`);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -127,7 +106,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   console.log('');
   console.log(chalk.cyan(`   ${authToken}`));
   console.log('');
-  console.log(chalk.yellow('💡 Copy this token to connect your web app:'));
+  console.log(chalk.yellow('Copy this token to connect your web app:'));
   console.log(chalk.gray('   1. Open the Raiken web platform'));
   console.log(chalk.gray('   2. Click "Connect Local Bridge"'));
   console.log(chalk.gray('   3. Paste the token above'));
@@ -148,7 +127,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      console.log(`${chalk.red('❌ Missing or invalid authorization header:')} ${req.method} ${req.path}`);
+      console.log(`${chalk.red('Missing or invalid authorization header:')} ${req.method} ${req.path}`);
       return res.status(401).json({ error: 'Authorization header required' });
     }
     
@@ -156,13 +135,13 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     
     // Validate token format and age
     if (!validateAuthToken(token)) {
-      console.log(`${chalk.red('❌ Invalid token format:')} ${req.method} ${req.path}`);
+      console.log(`${chalk.red('Invalid token format:')} ${req.method} ${req.path}`);
       return res.status(401).json({ error: 'Invalid token format' });
     }
     
     // Check if token matches current session
     if (token !== authToken) {
-      console.log(`${chalk.red('❌ Token mismatch:')} ${req.method} ${req.path}`);
+      console.log(`${chalk.red('Token mismatch:')} ${req.method} ${req.path}`);
       return res.status(401).json({ error: 'Invalid token' });
     }
     
@@ -174,13 +153,32 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
 
   // Health check endpoint (no auth required)
   app.get('/api/health', (req: Request, res: Response) => {
-    res.json({
-      status: 'ok',
-      project: projectInfo.name,
-      type: projectInfo.type,
-      testDir: projectInfo.testDir,
-      timestamp: new Date().toISOString()
-    });
+    try {
+      const uptime = process.uptime();
+      const memoryUsage = process.memoryUsage();
+      
+      res.json({
+        status: 'ok',
+        project: projectInfo.name,
+        type: projectInfo.type,
+        testDir: projectInfo.testDir,
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(uptime),
+        memory: {
+          used: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+          total: Math.round(memoryUsage.heapTotal / 1024 / 1024) // MB
+        },
+        version: process.version,
+        port: availablePort
+      });
+    } catch (error) {
+      console.error('Health check error:', error);
+      res.status(500).json({
+        status: 'error',
+        error: 'Health check failed',
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 
   // Project info with auth token
@@ -315,17 +313,33 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     console.log(chalk.green(`✓ Raiken bridge server running at http://localhost:${availablePort}`));
     console.log(chalk.blue(`  Project: ${projectInfo.name} (${projectInfo.type})`));
     console.log(chalk.blue(`  Test directory: ${projectInfo.testDir}`));
-    console.log(chalk.yellow(`  🌐 Hosted platform configuration:`));
-    console.log(chalk.gray(`     URL: http://localhost:${availablePort}`));
-    console.log(chalk.gray(`     Token: ${authToken}`));
+    console.log(chalk.yellow(`Hosted platform configuration:`));
+    console.log(chalk.gray(`  URL: http://localhost:${availablePort}`));
+    console.log(chalk.gray(`  Token: ${authToken}`));
     console.log('');
-    console.log(chalk.cyan('💡 The hosted platform will automatically detect this server'));
-    console.log(chalk.cyan('   and save generated tests directly to your project.'));
+    console.log(chalk.cyan('The hosted platform will automatically detect this server'));
+    console.log(chalk.cyan('and save generated tests directly to your project.'));
   });
 
   // Graceful shutdown
   process.on('SIGINT', () => {
-    console.log(chalk.yellow('\n⚠ Shutting down bridge server...'));
+    console.log(chalk.yellow('\nShutting down bridge server...'));
+    
+    // Cleanup filesystem adapter
+    fsAdapter.cleanup();
+    
+    server.close(() => {
+      console.log(chalk.green('✓ Server stopped'));
+      process.exit(0);
+    });
+  });
+
+  process.on('SIGTERM', () => {
+    console.log(chalk.yellow('\nReceived SIGTERM, shutting down gracefully...'));
+    
+    // Cleanup filesystem adapter
+    fsAdapter.cleanup();
+    
     server.close(() => {
       console.log(chalk.green('✓ Server stopped'));
       process.exit(0);
@@ -333,33 +347,69 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 }
 
+async function findAvailablePort(requestedPort: number): Promise<number> {
+  let availablePort = await detectPort(requestedPort);
+  
+  if (availablePort !== requestedPort) {
+    console.log(chalk.yellow(`Port ${requestedPort} is busy, trying fallback ports...`));
+    
+    const basePort = 3460;
+    for (let i = 0; i < 10; i++) {
+      const tryPort = basePort + i;
+      const testPort = await detectPort(tryPort);
+      if (testPort === tryPort) {
+        availablePort = tryPort;
+        console.log(chalk.green(`Using port ${availablePort}`));
+        break;
+      }
+    }
+    
+    if (availablePort !== requestedPort) {
+      console.log(chalk.yellow(`Using port ${availablePort} (fallback from ${requestedPort})`));
+    }
+  }
+  
+  return availablePort;
+}
+
+function setupGlobalErrorHandling(): void {
+  process.on('uncaughtException', (error) => {
+    console.error(chalk.red('Uncaught Exception:'), error);
+  });
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error(chalk.red('Unhandled Rejection at:'), promise, 'reason:', reason);
+  });
+}
+
+function setupRequestTimeout(app: express.Application): void {
+  app.use((req, res, next) => {
+    req.setTimeout(30000);
+    res.setTimeout(30000);
+    next();
+  });
+}
+
 function generateAuthToken(): string {
-  // Generate a cryptographically secure token
   const crypto = require('crypto');
   const randomBytes = crypto.randomBytes(32);
   const timestamp = Date.now().toString(36);
   const random = randomBytes.toString('hex');
   
-  // Combine timestamp and random for uniqueness and some time-based validation
   return `${timestamp}-${random}`;
 }
 
 function validateAuthToken(token: string): boolean {
   if (!token || typeof token !== 'string') return false;
   
-  // Check format: timestamp-randomhex
   const parts = token.split('-');
   if (parts.length !== 2) return false;
   
   const [timestampPart, randomPart] = parts;
   
-  // Validate timestamp part (base36)
   if (!/^[0-9a-z]+$/.test(timestampPart)) return false;
-  
-  // Validate random part (hex)
   if (!/^[0-9a-f]{64}$/.test(randomPart)) return false;
   
-  // Check if token is not too old (24 hours)
   const timestamp = parseInt(timestampPart, 36);
   const age = Date.now() - timestamp;
   const maxAge = 24 * 60 * 60 * 1000; // 24 hours

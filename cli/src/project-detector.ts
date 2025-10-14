@@ -17,42 +17,44 @@ export interface ProjectInfo {
   configFiles: string[];
 }
 
-export async function detectProject(projectPath: string): Promise<ProjectInfo> {
-  const packageJsonPath = path.join(projectPath, 'package.json');
-  
-  // Check if package.json exists
-  let packageJson: any = {};
-  let projectName = path.basename(projectPath);
-  
-  try {
-    const packageContent = await fs.readFile(packageJsonPath, 'utf-8');
-    packageJson = JSON.parse(packageContent);
-    projectName = packageJson.name || projectName;
-  } catch (error) {
-    // No package.json found, treat as generic project
-  }
+export interface TestFile {
+  name: string;
+  path: string;
+  content: string;
+  createdAt: string;
+  modifiedAt: string;
+}
 
+export interface TestReport {
+  id: string;
+  testPath: string;
+  timestamp: string;
+  success: boolean;
+  output: string;
+  error?: string;
+  config: any;
+  results?: any;
+}
+
+export async function detectProject(projectPath: string): Promise<ProjectInfo> {
+  const packageJson = await loadPackageJson(projectPath);
+  const projectName = packageJson.name || path.basename(projectPath);
+  
   const dependencies = packageJson.dependencies || {};
   const devDependencies = packageJson.devDependencies || {};
   const scripts = packageJson.scripts || {};
   const allDeps = { ...dependencies, ...devDependencies };
 
-  // Detect project type
-  const projectType = detectProjectType(allDeps, projectPath);
+  const [projectType, packageManager, testDir, configFiles] = await Promise.all([
+    detectProjectType(allDeps),
+    detectPackageManager(projectPath),
+    detectTestDirectory(projectPath, detectProjectType(allDeps)),
+    findConfigFiles(projectPath)
+  ]);
   
-  // Detect package manager
-  const packageManager = await detectPackageManager(projectPath);
-  
-  // Detect test directory
-  const testDir = await detectTestDirectory(projectPath, projectType);
-  
-  // Check for testing frameworks
   const hasPlaywright = !!(allDeps['playwright'] || allDeps['@playwright/test']);
   const hasJest = !!(allDeps['jest'] || allDeps['@types/jest']);
   const hasVitest = !!(allDeps['vitest']);
-  
-  // Find config files
-  const configFiles = await findConfigFiles(projectPath);
 
   return {
     name: projectName,
@@ -70,45 +72,33 @@ export async function detectProject(projectPath: string): Promise<ProjectInfo> {
   };
 }
 
-function detectProjectType(
-  dependencies: Record<string, string>,
-  projectPath: string
-): ProjectInfo['type'] {
-  // Check for Next.js
-  if (dependencies['next']) {
-    return 'nextjs';
+async function loadPackageJson(projectPath: string): Promise<any> {
+  try {
+    const packageJsonPath = path.join(projectPath, 'package.json');
+    const content = await fs.readFile(packageJsonPath, 'utf-8');
+    return JSON.parse(content);
+  } catch {
+    return {};
   }
-  
-  // Check for Nuxt
-  if (dependencies['nuxt'] || dependencies['nuxt3'] || dependencies['@nuxt/kit']) {
-    return 'nuxt';
+}
+
+function detectProjectType(dependencies: Record<string, string>): ProjectInfo['type'] {
+  const frameworks = [
+    { deps: ['next'], type: 'nextjs' as const },
+    { deps: ['nuxt', 'nuxt3', '@nuxt/kit'], type: 'nuxt' as const },
+    { deps: ['vue', '@vue/cli-service'], type: 'vue' as const },
+    { deps: ['svelte', '@sveltejs/kit'], type: 'svelte' as const },
+    { deps: ['@angular/core', '@angular/cli'], type: 'angular' as const },
+    { deps: ['vite'], type: 'vite' as const },
+    { deps: ['react', 'react-dom'], type: 'react' as const }
+  ];
+
+  for (const { deps, type } of frameworks) {
+    if (deps.some(dep => dependencies[dep])) {
+      return type;
+    }
   }
-  
-  // Check for Vue
-  if (dependencies['vue'] || dependencies['@vue/cli-service']) {
-    return 'vue';
-  }
-  
-  // Check for Svelte/SvelteKit
-  if (dependencies['svelte'] || dependencies['@sveltejs/kit']) {
-    return 'svelte';
-  }
-  
-  // Check for Angular
-  if (dependencies['@angular/core'] || dependencies['@angular/cli']) {
-    return 'angular';
-  }
-  
-  // Check for Vite
-  if (dependencies['vite']) {
-    return 'vite';
-  }
-  
-  // Check for React (should be after framework-specific checks)
-  if (dependencies['react'] || dependencies['react-dom']) {
-    return 'react';
-  }
-  
+
   return 'generic';
 }
 
@@ -136,17 +126,6 @@ async function detectTestDirectory(
   projectPath: string,
   projectType: ProjectInfo['type']
 ): Promise<string> {
-  const possibleDirs = [
-    'tests',
-    'test',
-    'e2e',
-    '__tests__',
-    'spec',
-    'cypress',
-    'playwright'
-  ];
-
-  // Framework-specific preferences
   const frameworkPreferences: Record<string, string[]> = {
     nextjs: ['e2e', 'tests', '__tests__', 'test'],
     react: ['src/__tests__', '__tests__', 'tests', 'test'],
@@ -158,9 +137,8 @@ async function detectTestDirectory(
     generic: ['tests', 'test', 'e2e']
   };
 
-  const preferredDirs = frameworkPreferences[projectType] || possibleDirs;
+  const preferredDirs = frameworkPreferences[projectType] || ['tests', 'test', 'e2e'];
 
-  // Check for existing test directories
   for (const dir of preferredDirs) {
     try {
       const fullPath = path.join(projectPath, dir);
@@ -169,11 +147,10 @@ async function detectTestDirectory(
         return dir;
       }
     } catch {
-      // Directory doesn't exist, continue
+      continue;
     }
   }
 
-  // Default based on project type
   const defaults: Record<string, string> = {
     nextjs: 'e2e',
     react: 'tests',
@@ -206,14 +183,16 @@ async function findConfigFiles(projectPath: string): Promise<string[]> {
 
   const configFiles: string[] = [];
 
-  for (const pattern of configPatterns) {
-    try {
-      const matches = await glob(pattern, { cwd: projectPath });
-      configFiles.push(...matches);
-    } catch (error) {
-      // Ignore errors in glob patterns
-    }
-  }
+  await Promise.all(
+    configPatterns.map(async (pattern) => {
+      try {
+        const matches = await glob(pattern, { cwd: projectPath });
+        configFiles.push(...matches);
+      } catch {
+        // Ignore glob errors
+      }
+    })
+  );
 
   return configFiles.sort();
 }

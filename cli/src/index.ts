@@ -8,6 +8,9 @@ import { initializeProject } from './project-initializer';
 
 const program = new Command();
 
+// Get version from package.json
+const packageJson = require('../package.json');
+
 async function checkInstallation() {
   try {
     const { execSync } = require('child_process');
@@ -22,7 +25,7 @@ async function checkInstallation() {
 program
   .name('raiken')
   .description('AI-powered Playwright test generator - Local bridge for hosted platform')
-  .version('0.2.14', '-v, --version', 'output the current version');
+  .version(packageJson.version, '-v, --version', 'output the current version');
 
 program
   .command('init')

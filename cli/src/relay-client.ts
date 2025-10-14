@@ -39,14 +39,14 @@ export class RelayClient {
       try {
         const wsUrl = `${this.options.relayUrl}?role=cli&session=${encodeURIComponent(this.options.sessionId)}`;
         
-        console.log(chalk.blue('🌐 Connecting to relay server...'));
-        console.log(chalk.gray(`   URL: ${wsUrl}`));
-        console.log(chalk.gray(`   Session: ${this.options.sessionId}`));
+        console.log(chalk.blue('Connecting to relay server...'));
+        console.log(chalk.gray(`URL: ${wsUrl}`));
+        console.log(chalk.gray(`Session: ${this.options.sessionId}`));
         
         this.ws = new WebSocket(wsUrl);
 
         this.ws.on('open', () => {
-          console.log(chalk.green('✓ Connected to relay server'));
+          console.log(chalk.green('Connected to relay server'));
           this.isConnected = true;
           this.startPingTimer();
           resolve(true);
@@ -57,12 +57,12 @@ export class RelayClient {
             const message: RelayMessage = JSON.parse(data.toString());
             await this.handleMessage(message);
           } catch (error) {
-            console.error(chalk.red('❌ Failed to handle relay message:'), error);
+            console.error(chalk.red('Failed to handle relay message:'), error);
           }
         });
 
         this.ws.on('close', () => {
-          console.log(chalk.yellow('🔄 Relay connection closed'));
+          console.log(chalk.yellow('Relay connection closed'));
           this.isConnected = false;
           this.stopPingTimer();
           this.scheduleReconnect();
@@ -70,7 +70,7 @@ export class RelayClient {
         });
 
         this.ws.on('error', (error: Error) => {
-          console.error(chalk.red('❌ Relay connection error:'), error);
+          console.error(chalk.red('Relay connection error:'), error);
           this.isConnected = false;
           this.stopPingTimer();
           resolve(false);
@@ -85,7 +85,7 @@ export class RelayClient {
         }, 10000);
 
       } catch (error) {
-        console.error(chalk.red('❌ Failed to create relay connection:'), error);
+        console.error(chalk.red('Failed to create relay connection:'), error);
         resolve(false);
       }
     });
@@ -93,7 +93,6 @@ export class RelayClient {
 
   private async handleMessage(message: RelayMessage): Promise<void> {
     if (message.type === 'ping') {
-      // Respond to ping
       this.sendMessage({
         id: message.id,
         type: 'pong'
@@ -120,58 +119,64 @@ export class RelayClient {
   }
 
   private async handleRpcMethod(method: string, params: any): Promise<any> {
-    console.log(chalk.cyan(`📡 Relay RPC: ${method}`), params);
-
-    switch (method) {
-      case 'saveTest':
-        const { content, filename, tabId } = params;
+    const rpcHandlers: Record<string, (params: any) => Promise<any>> = {
+      saveTest: async ({ content, filename, tabId }) => {
         const savedPath = await this.fsAdapter.saveTestFile(content, filename, tabId);
         return { success: true, path: savedPath };
-
-      case 'executeTest':
-        const { testPath, config } = params;
+      },
+      
+      executeTest: async ({ testPath, config }) => {
         return await this.fsAdapter.executeTest(testPath, config);
-
-      case 'getTestFiles':
+      },
+      
+      getTestFiles: async () => {
         const testFiles = await this.fsAdapter.getTestFiles();
         return { success: true, files: testFiles };
-
-      case 'getReports':
+      },
+      
+      getReports: async () => {
         const reports = await this.fsAdapter.getReports();
         return { success: true, reports };
-
-      case 'deleteReport':
-        const { reportId } = params;
+      },
+      
+      deleteReport: async ({ reportId }) => {
         await this.fsAdapter.deleteReport(reportId);
         return { success: true };
-
-      case 'ping':
+      },
+      
+      deleteTest: async ({ testPath }) => {
+        await this.fsAdapter.deleteTestFile(testPath);
+        return { success: true };
+      },
+      
+      ping: async () => {
         return { pong: Date.now() };
+      }
+    };
 
-      default:
-        throw new Error(`Unknown method: ${method}`);
+    const handler = rpcHandlers[method];
+    if (!handler) {
+      throw new Error(`Unknown RPC method: ${method}`);
     }
+
+    return await handler(params);
   }
 
   private sendMessage(message: RelayMessage): void {
-    if (this.ws && this.isConnected) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     }
   }
 
   private startPingTimer(): void {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-    }
-
     this.pingTimer = setInterval(() => {
-      if (this.isConnected) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.sendMessage({
-          id: Date.now().toString(),
+          id: `ping_${Date.now()}`,
           type: 'ping'
         });
       }
-    }, 30000); // Ping every 30 seconds
+    }, 30000);
   }
 
   private stopPingTimer(): void {
@@ -187,9 +192,9 @@ export class RelayClient {
     }
 
     this.reconnectTimer = setTimeout(() => {
-      console.log(chalk.blue('🔄 Attempting to reconnect to relay...'));
+      console.log(chalk.blue('Attempting to reconnect to relay...'));
       this.connect();
-    }, 5000); // Reconnect after 5 seconds
+    }, 5000);
   }
 
   disconnect(): void {
@@ -204,7 +209,8 @@ export class RelayClient {
       this.ws.close();
       this.ws = null;
     }
-
+    
+    this.fsAdapter.cleanup();
     this.isConnected = false;
   }
 
