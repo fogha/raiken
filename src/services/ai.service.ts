@@ -1,7 +1,3 @@
-/**
- * AI Service - Abstraction for AI operations
- */
-
 import { OpenRouterService } from '@/core/testing/services/openrouter.service';
 import { OpenRouterConfig } from '@/types';
 
@@ -12,10 +8,9 @@ export class AiService {
     this.initializeOpenRouter();
   }
 
-  private initializeOpenRouter() {
-    const apiKey = process.env.OPENROUTER_API_KEY || '';
+  private initializeOpenRouter(): void {
+    const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      console.warn('OpenRouter API key not found. AI features will be disabled.');
       return;
     }
 
@@ -25,21 +20,15 @@ export class AiService {
     });
   }
 
-  /**
-   * Check if AI service is available
-   */
   isAvailable(): boolean {
     return this.openRouter !== null;
   }
 
-  /**
-   * Generate test script
-   */
   async generateTestScript(
     prompt: string,
     domTree?: any,
     url?: string
-  ): Promise<string | null> {
+  ): Promise<string> {
     if (!this.openRouter) {
       throw new Error('AI service not available. Please configure OPENROUTER_API_KEY.');
     }
@@ -47,9 +36,6 @@ export class AiService {
     return this.openRouter.generateTestScript(prompt);
   }
 
-  /**
-   * Analyze test results
-   */
   async analyzeTestResults(
     testScript: string,
     results: any,
@@ -59,19 +45,24 @@ export class AiService {
       return null;
     }
 
-    // This would use the OpenRouter service to analyze results
-    // Implementation depends on the analysis requirements
+    // Future implementation for test result analysis
     return null;
   }
 
-  /**
-   * Update AI configuration
-   */
-  updateConfig(config: Partial<OpenRouterConfig>) {
-    if (this.openRouter) {
-      // Update configuration
-      // This would require modifying the OpenRouterService to support config updates
+  updateConfig(config: Partial<OpenRouterConfig>): void {
+    if (config.apiKey) {
+      this.openRouter = new OpenRouterService({
+        apiKey: config.apiKey,
+        model: config.model || 'anthropic/claude-3.5-sonnet',
+      });
     }
+  }
+
+  getConfig(): OpenRouterConfig | null {
+    return this.openRouter ? {
+      apiKey: '***',
+      model: 'anthropic/claude-3.5-sonnet'
+    } : null;
   }
 }
 

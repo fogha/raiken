@@ -1,66 +1,53 @@
-/**
- * Test Service - High-level test operations
- */
-
 import { apiService } from './api.service';
 import { 
   TestGenerateRequest,
   TestExecuteRequest,
   TestSaveRequest,
-  TestDeleteRequest,
   ApiResponse
 } from '@/types';
 
 export class TestService {
-  /**
-   * Generate test script using AI
-   */
+  private readonly endpoint = '/tests';
+
   async generateTest(options: Omit<TestGenerateRequest, 'action'>): Promise<ApiResponse<{ testScript: string }>> {
-    return apiService.post('/tests', {
+    return apiService.post(this.endpoint, {
       action: 'generate',
       ...options,
     });
   }
 
-  /**
-   * Execute test script
-   */
   async executeTest(options: Omit<TestExecuteRequest, 'action'>): Promise<ApiResponse> {
-    return apiService.post('/tests', {
+    return apiService.post(this.endpoint, {
       action: 'execute',
       ...options,
     });
   }
 
-  /**
-   * Save test script
-   */
   async saveTest(options: Omit<TestSaveRequest, 'action'>): Promise<ApiResponse<{ filePath: string }>> {
-    return apiService.post('/tests', {
+    return apiService.post(this.endpoint, {
       action: 'save',
       ...options,
     });
   }
 
-  /**
-   * List all test files
-   */
   async listTests(): Promise<ApiResponse> {
-    return apiService.get('/tests', { action: 'list' });
+    return apiService.get(this.endpoint, { action: 'list' });
   }
 
-  /**
-   * Delete test file
-   */
   async deleteTest(testPath: string): Promise<ApiResponse> {
-    return apiService.delete(`/tests?path=${encodeURIComponent(testPath)}`);
+    return apiService.delete(`${this.endpoint}?path=${encodeURIComponent(testPath)}`);
   }
 
-  /**
-   * Get test reports
-   */
   async getReports(): Promise<ApiResponse> {
-    return apiService.get('/tests', { action: 'reports' });
+    return apiService.get(this.endpoint, { action: 'reports' });
+  }
+
+  async getTestContent(testPath: string): Promise<ApiResponse<{ content: string }>> {
+    return apiService.get(`${this.endpoint}/content`, { path: testPath });
+  }
+
+  async updateTest(testPath: string, content: string): Promise<ApiResponse> {
+    return apiService.put(`${this.endpoint}/content`, { path: testPath, content });
   }
 }
 

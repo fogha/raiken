@@ -1,7 +1,3 @@
-/**
- * Browser Service - High-level browser operations
- */
-
 import { apiService } from './api.service';
 import { 
   BrowserInitializeRequest,
@@ -11,65 +7,57 @@ import {
 } from '@/types';
 
 export class BrowserService {
-  /**
-   * Initialize browser instance
-   */
+  private readonly endpoint = '/browser';
+
   async initialize(options: Omit<BrowserInitializeRequest, 'action'>): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'initialize',
       ...options,
     });
   }
 
-  /**
-   * Navigate to URL
-   */
   async navigate(options: Omit<BrowserNavigateRequest, 'action'>): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'navigate',
       ...options,
     });
   }
 
-  /**
-   * Extract DOM tree
-   */
   async extractDOM(scriptId?: string): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'extract-dom',
       scriptId,
     });
   }
 
-  /**
-   * Take screenshot
-   */
   async takeScreenshot(options: Omit<BrowserScreenshotRequest, 'action'>): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'take-screenshot',
       ...options,
     });
   }
 
-  /**
-   * Execute test script
-   */
   async executeTest(script: string, config?: any): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'execute-test',
       script,
       config,
     });
   }
 
-  /**
-   * Close browser
-   */
   async close(scriptId?: string): Promise<ApiResponse> {
-    return apiService.post('/browser', {
+    return apiService.post(this.endpoint, {
       action: 'close',
       scriptId,
     });
+  }
+
+  async getStatus(scriptId?: string): Promise<ApiResponse> {
+    return apiService.get(`${this.endpoint}/status`, scriptId ? { scriptId } : undefined);
+  }
+
+  async listSessions(): Promise<ApiResponse> {
+    return apiService.get(`${this.endpoint}/sessions`);
   }
 }
 

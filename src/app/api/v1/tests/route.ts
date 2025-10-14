@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OpenRouterService } from '@/core/testing/services/openrouter.service';
 import * as testFileManager from '@/core/testing/services/testFileManager';
 import { TestSuiteManager } from '@/core/testing/services/testSuite';
-import { localBridge } from '@/lib/local-bridge';
+import { localBridgeServiceService } from '@/lib/local-bridge';
 
 /**
  * Unified Tests API Handler
@@ -227,15 +227,11 @@ async function handleSaveTest(params: any) {
 async function handleListTests(params: any) {
   try {
     // Try to load via local CLI first, then fallback to server
-    let bridgeConnection = localBridge.getConnectionInfo();
-    if (!bridgeConnection) {
-      console.log(`[Raiken] No bridge connection found, attempting to detect local CLI...`);
-      bridgeConnection = await localBridge.detectLocalCLI();
-    }
+    let bridgeConnection = localBridgeService.getConnection();
 
-    if (bridgeConnection && localBridge.isConnected()) {
+    if (bridgeConnection && localBridgeService.isConnected()) {
       console.log('[Raiken] 📁 Loading tests via local CLI...');
-      const result = await localBridge.getLocalTestFiles();
+      const result = await localBridgeService.getTestFiles();
       
       if (result.success && result.files && Array.isArray(result.files)) {
         console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from local project`);
@@ -320,9 +316,9 @@ async function handleGetReports(params: any) {
     let reports = [];
     
     // Check if we should use local bridge
-    if (localBridge.isConnected()) {
+    if (localBridgeService.isConnected()) {
       console.log('[Raiken] 📊 Loading reports via local CLI...');
-      const bridgeResult = await localBridge.getLocalReports();
+      const bridgeResult = await localBridgeService.getLocalReports();
       if (bridgeResult.success && bridgeResult.reports) {
         reports = bridgeResult.reports;
         console.log(`[Raiken] ✅ Loaded ${reports.length} reports from local project`);
@@ -361,9 +357,9 @@ async function handleDeleteReport(params: any) {
 
   try {
     // Check if we should use local bridge
-    if (localBridge.isConnected()) {
+    if (localBridgeService.isConnected()) {
       console.log(`[Raiken] 🗑️ Deleting report via local CLI: ${id}`);
-      const bridgeResult = await localBridge.deleteLocalReport(id);
+      const bridgeResult = await localBridgeService.deleteLocalReport(id);
       if (bridgeResult.success) {
         console.log(`[Raiken] ✅ Report deleted from local project: ${id}`);
         return NextResponse.json({ success: true });

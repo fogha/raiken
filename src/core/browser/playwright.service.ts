@@ -1,21 +1,32 @@
 import { chromium, firefox, webkit, Browser, Page, BrowserContext } from 'playwright';
 import { DOMNode } from '@/types/dom';
 
+/**
+ * PlaywrightService - Browser automation for DOM extraction and interactive browsing
+ * 
+ * This service handles:
+ * - DOM tree extraction for AI test generation
+ * - Interactive browsing and element selection
+ * - Screenshot capture for visual feedback
+ * - Page navigation and manipulation
+ * 
+ * Note: Actual test execution is handled by the CLI bridge system, not this service.
+ * This service is focused on real-time browser interaction within the web UI.
+ */
 export class PlaywrightService {
-  // Maps to store browser instances and pages for each script
+  // Maps to store browser instances and pages for DOM extraction and interactive browsing
   private browsers: Map<string, Browser> = new Map();
   private contexts: Map<string, BrowserContext> = new Map();
   private pages: Map<string, Page> = new Map();
   private activeScriptId: string | null = null;
   
-  // Backwards compatibility for code that doesn't yet use scriptId
+  // Default browser instance for DOM extraction and interactive browsing
   private browser: Browser | null = null;
-  private context: BrowserContext | null = null;
   private page: Page | null = null;
   
   /**
-   * Initialize a browser instance for a specific script
-   * @param scriptId - Unique identifier for the script/browser instance
+   * Initialize a browser instance for DOM extraction and interactive browsing
+   * @param scriptId - Unique identifier for the browser session
    * @param browserType - Type of browser to launch
    * @param headless - Whether to run browser in headless mode (invisible) or normal mode (visible)
    */
@@ -33,7 +44,7 @@ export class PlaywrightService {
     if (this.browsers.has(scriptId)) return;
     
     try {      
-      console.log(`[Raiken] Launching ${browserType} browser with headless=${headless} for script ${scriptId}`);
+      console.log(`[Raiken] Launching ${browserType} browser with headless=${headless} for session ${scriptId}`);
       const browser = await (browserType === 'firefox' 
         ? firefox.launch({ headless }) 
         : browserType === 'webkit' 
@@ -48,9 +59,8 @@ export class PlaywrightService {
       this.contexts.set(scriptId, context);
       this.pages.set(scriptId, page);
       
-      // Set as default for backward compatibility
+      // Set as default for DOM extraction and interactive browsing
       this.browser = browser;
-      this.context = context;
       this.page = page;
     } catch (error) {
       console.error('Failed to initialize Playwright:', error);
@@ -59,9 +69,9 @@ export class PlaywrightService {
   }
   
   /**
-   * Navigate to a URL using a specific script's browser instance
+   * Navigate to a URL for DOM extraction and interactive browsing
    * @param url - URL to navigate to
-   * @param scriptId - ID of the script whose browser should navigate (uses active script if not specified)
+   * @param scriptId - ID of the browser session (uses active session if not specified)
    */
   async navigate(url: string, scriptId?: string): Promise<void> {
     const targetScriptId = scriptId || this.activeScriptId || 'default';
@@ -79,10 +89,10 @@ export class PlaywrightService {
         throw new Error(`Failed to initialize page for script ${targetScriptId}`);
       }
       
-      console.log(`[Raiken] Navigating to ${url} with browser for script ${targetScriptId}`);
+      console.log(`[Raiken] Navigating to ${url} with browser session ${targetScriptId}`);
       await page.goto(url, { waitUntil: 'networkidle' });
       
-      // Update legacy reference if this is the active script
+      // Update default reference if this is the active session
       if (targetScriptId === this.activeScriptId) {
         this.page = page;
       }
@@ -92,6 +102,10 @@ export class PlaywrightService {
     }
   }
   
+  /**
+   * Extract DOM tree from the current page for test generation and element selection
+   * @returns Complete DOM tree with selectors and metadata
+   */
   async extractDOM(): Promise<DOMNode> {
     // Make sure browser is initialized before extracting DOM
     if (!this.browser || !this.page) {
@@ -284,7 +298,7 @@ export class PlaywrightService {
   }
   
   /**
-   * Take a screenshot of the current page
+   * Take a screenshot of the current page for visual feedback and debugging
    * @param options Screenshot options
    * @returns Base64 encoded screenshot data URL
    */
@@ -327,7 +341,8 @@ export class PlaywrightService {
   }
 
   /**
-   * Get current page information including URL, title, and viewport
+   * Get current page information for context and debugging
+   * @returns Page URL, title, and viewport dimensions
    */
   async getPageInfo(): Promise<{
     url: string;
@@ -350,6 +365,12 @@ export class PlaywrightService {
     }
   }
   
+  /**
+   * Execute interactive actions for testing and element manipulation
+   * Note: This is for interactive browsing only. Actual test execution is handled by CLI bridge.
+   * @param action Action to execute (click, type, select, etc.)
+   * @returns Action result
+   */
   async executeAction(action: { type: string; selector: string; value?: string; property?: string }): Promise<any> {
     // Make sure browser is initialized before executing actions
     if (!this.browser || !this.page) {
@@ -424,354 +445,13 @@ export class PlaywrightService {
   }
   
   /**
-   * Run a test script with its own browser instance
-   * @param script - The test script content to execute
-   * @param scriptId - Optional ID for this script (generated if not provided)
-   * @param config - Optional configuration for this test run
-   */
-  async runTestScript(
-    script: string, 
-    scriptId?: string,
-    config: {
-      browserType?: 'chromium' | 'firefox' | 'webkit',
-      headless?: boolean
-    } = {}
-  ): Promise<any> {
-    // Generate a unique ID for this test if none provided
-    const testId = scriptId || `test_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-    
-    // Extract configuration with defaults
-    const browserType = config.browserType || 'chromium';
-    const headless = config.headless !== undefined ? config.headless : true;
-    
-    console.log(`[Raiken] Running test script with ID: ${testId}, headless: ${headless}`);
-    
-    // Close existing browser for this script ID if it exists to ensure clean state
-    if (this.browsers.has(testId)) {
-      await this.close(testId);
-    }
-    
-    // Initialize a new browser for this test with the specified configuration
-    await this.initialize(testId, browserType, headless);
-    this.activeScriptId = testId;
-    
-    // Get the page for this script
-    const page = this.pages.get(testId);
-    if (!page) {
-      throw new Error(`Failed to initialize page for test script ${testId}`);
-    }
-    
-    // Update the legacy reference for backward compatibility
-    this.page = page;
-    
-    // Check if we have a Playwright TypeScript test or JSON test
-    const isPlaywrightTest = script.includes('import { test, expect }') || 
-                            script.includes('@playwright/test');
-    
-    try {
-      if (isPlaywrightTest) {
-        return await this.executePlaywrightTest(script);
-      }
-      
-      // Legacy JSON format handling
-      console.log('Parsing JSON test script...');
-      let testData;
-      try {
-        testData = JSON.parse(script);
-      } catch (e) {
-        if (isPlaywrightTest) {
-          // This shouldn't happen since we already checked for Playwright test
-          return await this.executePlaywrightTest(script);
-        }
-        return { 
-          success: false, 
-          error: 'Invalid test format - neither valid JSON nor recognized Playwright test' 
-        };
-      }
-      
-      const results = {
-        success: true,
-        name: testData.name,
-        type: testData.type,
-        steps: [] as any[],
-        assertions: [] as any[],
-        startTime: new Date().toISOString(),
-        endTime: '',
-        duration: 0
-      };
-      
-      const startTime = Date.now();
-      
-      // Execute test steps
-      console.log(`Executing test: ${testData.name}`);
-      if (testData.steps && Array.isArray(testData.steps)) {
-        for (let i = 0; i < testData.steps.length; i++) {
-          const step = testData.steps[i];
-          
-          const stepResult = { ...step, success: true, error: null };
-          
-          try {
-            switch (step.action) {
-              case 'navigate': {
-                await this.navigate(step.url);
-                break;
-              }
-              case 'click': {
-                await this.page.click(step.element);
-                break;
-              }
-              case 'type': {
-                await this.page.fill(step.element, step.value);
-                break;
-              }
-              case 'wait': {
-                if (step.ms) {
-                  await this.page.waitForTimeout(step.ms);
-                } else if (step.element) {
-                  await this.page.waitForSelector(step.element, { timeout: step.timeout || 5000 });
-                }
-                break;
-              }
-              default: {
-                stepResult.success = false;
-                stepResult.error = `Unknown action type: ${step.action}`;
-              }
-            }
-          } catch (error) {
-            stepResult.success = false;
-            stepResult.error = error instanceof Error ? error.message : String(error);
-          }
-          
-          results.steps.push(stepResult);
-          
-          // Stop execution if a step fails
-          if (!stepResult.success) {
-            results.success = false;
-            break;
-          }
-        }
-      }
-      
-      // Only run assertions if all steps passed
-      if (results.success && testData.assertions && Array.isArray(testData.assertions)) {
-        for (let i = 0; i < testData.assertions.length; i++) {
-          const assertion = testData.assertions[i];
-          
-          const assertionResult = { ...assertion, success: true, error: null };
-          
-          try {
-            switch (assertion.type) {
-              case 'element': {
-                switch (assertion.condition) {
-                  case 'visible': {
-                    await this.page.waitForSelector(assertion.selector, { 
-                      state: 'visible',
-                      timeout: assertion.timeout || 5000 
-                    });
-                    break;
-                  }
-                  case 'hidden': {
-                    await this.page.waitForSelector(assertion.selector, { 
-                      state: 'hidden',
-                      timeout: assertion.timeout || 5000 
-                    });
-                    break;
-                  }
-                  case 'contains': {
-                    const text = await this.page.textContent(assertion.selector);
-                    if (!text || !text.includes(assertion.value)) {
-                      throw new Error(`Element ${assertion.selector} does not contain text: ${assertion.value}`);
-                    }
-                    break;
-                  }
-                  default: {
-                    assertionResult.success = false;
-                    assertionResult.error = `Unknown condition: ${assertion.condition}`;
-                  }
-                }
-                break;
-              }
-              case 'url': {
-                const currentUrl = this.page.url();
-                if (assertion.condition === 'equals' && currentUrl !== assertion.value) {
-                  throw new Error(`URL ${currentUrl} does not equal ${assertion.value}`);
-                } else if (assertion.condition === 'contains' && !currentUrl.includes(assertion.value)) {
-                  throw new Error(`URL ${currentUrl} does not contain ${assertion.value}`);
-                }
-                break;
-              }
-              default: {
-                assertionResult.success = false;
-                assertionResult.error = `Unknown assertion type: ${assertion.type}`;
-              }
-            }
-          } catch (error) {
-            assertionResult.success = false;
-            assertionResult.error = error instanceof Error ? error.message : String(error);
-          }
-          
-          results.assertions.push(assertionResult);
-          
-          // Stop execution if an assertion fails
-          if (!assertionResult.success) {
-            results.success = false;
-            break;
-          }
-        }
-      }
-      
-      // Calculate test duration
-      const endTime = Date.now();
-      results.endTime = new Date().toISOString();
-      results.duration = endTime - startTime;
-      
-      console.log(`Test completed: ${results.success ? 'PASS' : 'FAIL'}`);
-      return results;
-    } catch (error) {
-      console.error('Test execution failed:', error);
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : String(error),
-        startTime: new Date().toISOString(),
-        endTime: new Date().toISOString(),
-        duration: 0
-      };
-    }
-  }
-  
-  /**
-   * Execute a Playwright test written in TypeScript
-   * This performs a simplified execution of key actions from the script
-   */
-  private async executePlaywrightTest(script: string, scriptId?: string): Promise<any> {
-    console.log(`[Raiken] Executing Playwright TypeScript test for script ${scriptId || 'unknown'}...`);
-    
-    try {
-      // Get the page for this script ID (or use legacy page as fallback)
-      const targetScriptId = scriptId || this.activeScriptId || 'default';
-      const page = this.pages.get(targetScriptId) || this.page;
-      
-      if (!page) {
-        throw new Error(`No browser page available for script ${targetScriptId}`);
-      }
-      
-      // Set up results structure first
-      const results = {
-        success: true,
-        scriptId: targetScriptId,
-        actions: [] as any[],
-        startTime: new Date().toISOString(),
-        endTime: '',
-        duration: 0
-      };
-      
-      const startTime = Date.now();
-      
-      // Extract URL from the script
-      const urlMatch = script.match(/goto\(['"](https?:\/\/[^'"]+)['"]/); 
-      const url = urlMatch ? urlMatch[1] : null;
-      
-      if (url) {
-        console.log(`[Raiken] Found URL in test: ${url}`);
-        await this.navigate(url, targetScriptId);
-        results.actions.push({ type: 'navigate', url, success: true });
-      }
-      
-      // Extract click operations
-      const clickPattern = /click\(['"]([^'"]+)['"]\)/g;
-      let clickMatch;
-      const clicks = [];
-      
-      while ((clickMatch = clickPattern.exec(script)) !== null) {
-        if (clickMatch[1]) {
-          clicks.push(clickMatch[1]);
-        }
-      }
-      
-      // Execute click operations
-      for (const selector of clicks) {
-        try {
-          console.log(`[Raiken] Clicking element: ${selector}`);
-          await page.click(selector);
-          results.actions.push({ type: 'click', selector, success: true });
-        } catch (error) {
-          console.error(`[Raiken] Failed to click ${selector}:`, error);
-          results.actions.push({ 
-            type: 'click', 
-            selector, 
-            success: false, 
-            error: error instanceof Error ? error.message : String(error) 
-          });
-          results.success = false;
-        }
-      }
-      
-      // Extract fill operations 
-      const fillPattern = /\.fill\(['"](.[^'"]+)['"]\s*,\s*['"](.[^'"]+)['"]\)/g;
-      let fillMatch;
-      const fills = [];
-      
-      while ((fillMatch = fillPattern.exec(script)) !== null) {
-        if (fillMatch[1] && fillMatch[2]) {
-          fills.push({
-            selector: fillMatch[1],
-            value: fillMatch[2]
-          });
-        }
-      }
-      
-      console.log(`[Raiken] Found ${fills.length} fill operations in the test script`);
-      
-      for (const fill of fills) {
-        const selector = fill.selector?.replace(/['"]/g, '');
-        const value = fill.value?.replace(/['"]/g, '');
-        
-        if (selector && value && this.page) {
-        try {
-          console.log(`[Raiken] Filling element: ${selector} with value: ${value}`);
-          await this.page?.fill(selector, value);
-          results.actions.push({ type: 'fill', selector, value, success: true });
-        } catch (error) {
-          console.error(`[Raiken] Failed to fill ${selector}:`, error);
-          results.actions.push({ 
-            type: 'fill', 
-            selector, 
-            value, 
-            success: false, 
-            error: error instanceof Error ? error.message : String(error) 
-          });
-          results.success = false;
-          }
-        }
-      }
-      
-      // Calculate final duration and complete the test
-      const endTime = Date.now();
-      results.endTime = new Date().toISOString();
-      results.duration = endTime - startTime;
-      
-      console.log('[Raiken] Playwright test execution completed');
-      return results;
-    } catch (error) {
-      console.error('[Raiken] Error executing Playwright test:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-        startTime: new Date().toISOString(),
-        endTime: new Date().toISOString(),
-        duration: 0
-      };
-    }
-  }
-  
-  /**
-   * Close a specific browser instance by script ID or all browser instances if no scriptId is provided
-   * @param scriptId - ID of the script whose browser should be closed (closes all if not specified)
+   * Close browser instances for cleanup
+   * @param scriptId - ID of the browser session to close (closes all if not specified)
    */
   async close(scriptId?: string): Promise<void> {
     if (scriptId) {
       // Close a specific browser instance
-      console.log(`[Raiken] Closing browser for script ${scriptId}`);
+      console.log(`[Raiken] Closing browser session ${scriptId}`);
       const browser = this.browsers.get(scriptId);
       if (browser) {
         await browser.close();
@@ -779,11 +459,10 @@ export class PlaywrightService {
         this.contexts.delete(scriptId);
         this.pages.delete(scriptId);
         
-        // If we closed the active script, clear active script id
+        // If we closed the active session, clear references
         if (this.activeScriptId === scriptId) {
           this.activeScriptId = null;
           this.browser = null;
-          this.context = null;
           this.page = null;
         }
       }
@@ -801,10 +480,9 @@ export class PlaywrightService {
       this.contexts.clear();
       this.pages.clear();
       
-      // Reset legacy properties
+      // Reset default references
       this.activeScriptId = null;
       this.browser = null;
-      this.context = null;
       this.page = null;
     }
   }

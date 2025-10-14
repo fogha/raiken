@@ -18,7 +18,7 @@ import {
   Info
 } from 'lucide-react';
 import { unifiedBridge } from '@/lib/unified-bridge';
-import { localBridge } from '@/lib/local-bridge';
+import { localBridgeServiceService } from '@/lib/local-bridge';
 
 interface DiagnosticResult {
   name: string;
@@ -85,9 +85,9 @@ export function BridgeConnectionDiagnostics() {
       // Test 3: Authentication test
       if (localFound) {
         try {
-          const connection = await localBridge.ensureConnection();
+          const connection = await localBridgeService.detectLocalCLI();
           if (connection) {
-            const testResult = await localBridge.getLocalTestFiles();
+            const testResult = await localBridgeService.getTestFiles();
             diagnostics.push({
               name: 'Authentication',
               status: testResult.success ? 'pass' : 'fail',

@@ -1,5 +1,3 @@
-// Local bridge service for communicating with CLI package
-
 interface LocalBridgeConnection {
   url: string;
   token: string;
@@ -19,8 +17,9 @@ interface BridgeHealthInfo {
 class LocalBridgeService {
   private connection: LocalBridgeConnection | null = null;
   private readonly DEFAULT_PORTS = [3460, 3456, 3459, 3457, 3458];
-  private readonly TIMEOUT_MS = 1200;
-  private readonly HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
+  private readonly TIMEOUT_MS = 3000;
+  private readonly HEALTH_CHECK_INTERVAL = 30000;
+  private readonly OPERATION_TIMEOUT_MS = 8000;
   private healthCheckTimer: NodeJS.Timeout | null = null;
 
   private timeout<T>(promise: Promise<T>, ms = this.TIMEOUT_MS): Promise<T> {
@@ -33,102 +32,108 @@ class LocalBridgeService {
   }
 
   async detectLocalCLI(): Promise<LocalBridgeConnection | null> {
-    console.log('🔍 Detecting local Raiken CLI...');
-    
+    // Return existing connection if it's still valid
+    if (this.connection?.connected) {
+      return this.connection;
+    }
+
     for (const port of this.DEFAULT_PORTS) {
-      try {
-        const url = `http://127.0.0.1:${port}`;
-        
-        // Try health check with timeout
-        const healthResponse = await this.timeout(
-          fetch(`${url}/api/health`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          })
-        );
-        
-        if (!healthResponse.ok) continue;
-        
-        const healthData: BridgeHealthInfo = await healthResponse.json();
-        console.log(`✓ Found Raiken CLI at ${url}`, healthData);
-        
-        // Get detailed project info and auth token with timeout
-        const projectResponse = await this.timeout(
-          fetch(`${url}/api/project-info`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-          })
-        );
-        
-        if (!projectResponse.ok) {
-          console.warn(`⚠️ Health check passed but project-info failed for ${url}`);
-          continue;
-        }
-        
-        const projectInfo = await projectResponse.json();
-        
-        // Validate required fields
-        if (!projectInfo.authToken) {
-          console.warn(`⚠️ No auth token provided by CLI at ${url}`);
-          continue;
-        }
-        
-        // Test authentication
-        const authTestResponse = await this.timeout(
-          fetch(`${url}/api/test-files`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${projectInfo.authToken}`,
-              'Accept': 'application/json'
-            }
-          })
-        );
-        
-        if (!authTestResponse.ok) {
-          console.warn(`⚠️ Authentication test failed for ${url}`);
-          continue;
-        }
-        
-        this.connection = {
-          url,
-          token: projectInfo.authToken,
-          projectInfo,
-          connected: true,
-          lastHealthCheck: Date.now()
-        };
-        
-        // Start periodic health checks
+      const connection = await this.tryPort(port);
+      if (connection) {
+        this.connection = connection;
         this.startHealthChecks();
-        
-        // Store connection info in localStorage for faster reconnection
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('raiken_bridge_connection', JSON.stringify({
-            url,
-            token: projectInfo.authToken,
-            timestamp: Date.now()
-          }));
-        }
-        
-        return this.connection;
-        
-      } catch (error) {
-        // Port not available or CLI not running, continue searching
-        if (error instanceof Error && error.message !== 'timeout') {
-          console.debug(`Port ${port} check failed:`, error.message);
-        }
-        continue;
+        return connection;
       }
     }
     
-    console.log('❌ No local Raiken CLI detected');
     return null;
+  }
+
+  private async tryPort(port: number): Promise<LocalBridgeConnection | null> {
+    try {
+      const url = `http://127.0.0.1:${port}`;
+      
+      const healthData = await this.getHealthInfo(url);
+      if (!healthData) return null;
+      
+      const projectInfo = await this.getProjectInfo(url);
+      if (!projectInfo?.authToken) return null;
+      
+      const isAuthenticated = await this.testAuthentication(url, projectInfo.authToken);
+      if (!isAuthenticated) return null;
+      
+      return {
+        url,
+        token: projectInfo.authToken,
+        projectInfo,
+        connected: true,
+        lastHealthCheck: Date.now()
+      };
+      
+    } catch {
+      return null;
+    }
+  }
+
+  private async getHealthInfo(url: string): Promise<BridgeHealthInfo | null> {
+    try {
+      const response = await this.timeout(
+        fetch(`${url}/api/health`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        })
+      );
+      
+      if (!response.ok) return null;
+      
+      const healthData: BridgeHealthInfo = await response.json();
+      return healthData.status === 'ok' && healthData.project ? healthData : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getProjectInfo(url: string): Promise<any> {
+    try {
+      const response = await this.timeout(
+        fetch(`${url}/api/project-info`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' }
+        })
+      );
+      
+      return response.ok ? await response.json() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async testAuthentication(url: string, token: string): Promise<boolean> {
+    try {
+      const response = await this.timeout(
+        fetch(`${url}/api/test-files`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        })
+      );
+      
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   private startHealthChecks(): void {
     if (this.healthCheckTimer) {
       clearInterval(this.healthCheckTimer);
     }
-    
+
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
     this.healthCheckTimer = setInterval(async () => {
       if (this.connection) {
         try {
@@ -137,317 +142,32 @@ class LocalBridgeService {
               method: 'GET',
               headers: { 'Accept': 'application/json' }
             }),
-            5000 // Shorter timeout for health checks
+            3000
           );
-          
+
           if (response.ok) {
             this.connection.lastHealthCheck = Date.now();
             this.connection.connected = true;
+            consecutiveFailures = 0;
           } else {
             throw new Error(`Health check failed: ${response.status}`);
           }
         } catch (error) {
-          console.warn('🔄 Bridge connection lost, marking as disconnected');
-          this.connection.connected = false;
-          // Try to reconnect
-          setTimeout(() => this.detectLocalCLI(), 2000);
+          consecutiveFailures++;
+
+          if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+            this.connection.connected = false;
+            consecutiveFailures = 0;
+
+            const backoffDelay = Math.min(2000 * Math.pow(2, consecutiveFailures), 30000);
+            setTimeout(() => this.detectLocalCLI(), backoffDelay);
+          }
         }
       }
     }, this.HEALTH_CHECK_INTERVAL);
   }
 
-  private stopHealthChecks(): void {
-    if (this.healthCheckTimer) {
-      clearInterval(this.healthCheckTimer);
-      this.healthCheckTimer = null;
-    }
-  }
-
-  async tryStoredConnection(): Promise<LocalBridgeConnection | null> {
-    if (typeof window === 'undefined') return null;
-    
-    try {
-      const stored = localStorage.getItem('raiken_bridge_connection');
-      if (!stored) return null;
-      
-      const { url, token, timestamp } = JSON.parse(stored);
-      
-      // Check if stored connection is too old (1 hour)
-      if (Date.now() - timestamp > 3600000) {
-        localStorage.removeItem('raiken_bridge_connection');
-        return null;
-      }
-      
-      // Test the stored connection
-      const response = await this.timeout(
-        fetch(`${url}/api/health`, {
-          method: 'GET',
-          headers: { 'Accept': 'application/json' }
-        }),
-        2000 // Quick test
-      );
-      
-      if (response.ok) {
-        // Get fresh project info
-        const projectResponse = await this.timeout(
-          fetch(`${url}/api/project-info`, {
-            headers: { 'Accept': 'application/json' }
-          })
-        );
-        
-        if (projectResponse.ok) {
-          const projectInfo = await projectResponse.json();
-          
-          this.connection = {
-            url,
-            token,
-            projectInfo,
-            connected: true,
-            lastHealthCheck: Date.now()
-          };
-          
-          this.startHealthChecks();
-          console.log('✓ Reconnected using stored connection');
-          return this.connection;
-        }
-      }
-    } catch (error) {
-      // Stored connection failed, remove it
-      localStorage.removeItem('raiken_bridge_connection');
-    }
-    
-    return null;
-  }
-
-  async ensureConnection(): Promise<LocalBridgeConnection | null> {
-    // Try existing connection first
-    if (this.connection?.connected) {
-      return this.connection;
-    }
-    
-    // Try stored connection
-    const stored = await this.tryStoredConnection();
-    if (stored) return stored;
-    
-    // Full detection
-    return await this.detectLocalCLI();
-  }
-
-  async saveTestToLocal(testCode: string, filename: string, tabId?: string): Promise<{ success: boolean; path?: string; error?: string }> {
-    const connection = await this.ensureConnection();
-    if (!connection) {
-      return { 
-        success: false, 
-        error: 'No local Raiken CLI detected. Run "raiken start" in your project directory.' 
-      };
-    }
-
-    // Additional null check for TypeScript
-    if (!this.connection) {
-      return { 
-        success: false, 
-        error: 'Connection not established' 
-      };
-    }
-
-    try {
-      // Primary: new bridge endpoint
-      let response = await this.timeout(
-        fetch(`${connection.url}/api/save-test`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${connection.token}`,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({
-            content: testCode,
-            filename,
-            tabId
-          })
-        })
-      );
-
-      // Fallback for older bridge servers
-      if (response.status === 404) {
-        response = await this.timeout(
-          fetch(`${connection.url}/api/v1/tests`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${connection.token}`,
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              action: 'save',
-              content: testCode,
-              filename,
-              tabId
-            })
-          })
-        );
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Test saved to local project:', result);
-      
-      return { success: true, path: result.path || result.filePath };
-    } catch (error) {
-      console.error('❌ Failed to save test to local CLI:', error);
-      
-      // Mark connection as potentially broken
-      if (this.connection) {
-        this.connection.connected = false;
-      }
-      
-      return { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Unknown error' 
-      };
-    }
-  }
-
-  async executeTestRemotely(testPath: string, config: any): Promise<{ success: boolean; output?: string; error?: string }> {
-    const connection = await this.ensureConnection();
-    if (!connection) {
-      return { success: false, error: 'No local CLI connection' };
-    }
-
-    try {
-      const response = await this.timeout(
-        fetch(`${connection.url}/api/execute-test`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${connection.token}`,
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify({ testPath, config })
-        })
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      // Mark connection as potentially broken
-      if (this.connection) {
-        this.connection.connected = false;
-      }
-      
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  async getLocalTestFiles(): Promise<{ success: boolean; files?: any[]; error?: string }> {
-    const connection = await this.ensureConnection();
-    if (!connection) {
-      return { success: false, error: 'No local CLI connection' };
-    }
-
-    try {
-      const response = await this.timeout(
-        fetch(`${connection.url}/api/test-files`, {
-          headers: {
-            'Authorization': `Bearer ${connection.token}`,
-            'Accept': 'application/json'
-          }
-        })
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      return { success: true, files: data.files };
-    } catch (error) {
-      // Mark connection as potentially broken
-      if (this.connection) {
-        this.connection.connected = false;
-      }
-      
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  async getLocalReports(): Promise<{ success: boolean; reports?: any[]; error?: string }> {
-    const connection = await this.ensureConnection();
-    if (!connection) {
-      return { success: false, error: 'No local CLI connection' };
-    }
-
-    try {
-      const response = await this.timeout(
-        fetch(`${connection.url}/api/reports`, {
-          headers: {
-            'Authorization': `Bearer ${connection.token}`,
-            'Accept': 'application/json'
-          }
-        })
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      const data = await response.json();
-      return { success: true, reports: data.reports };
-    } catch (error) {
-      // Mark connection as potentially broken
-      if (this.connection) {
-        this.connection.connected = false;
-      }
-      
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  async deleteLocalReport(reportId: string): Promise<{ success: boolean; error?: string }> {
-    const connection = await this.ensureConnection();
-    if (!connection) {
-      return { success: false, error: 'No local CLI connection' };
-    }
-
-    try {
-      const response = await this.timeout(
-        fetch(`${connection.url}/api/reports/${reportId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${connection.token}`,
-            'Accept': 'application/json'
-          }
-        })
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-      }
-
-      return { success: true };
-    } catch (error) {
-      // Mark connection as potentially broken
-      if (this.connection) {
-        this.connection.connected = false;
-      }
-      
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
-    }
-  }
-
-  getConnectionInfo(): LocalBridgeConnection | null {
+  getConnection(): LocalBridgeConnection | null {
     return this.connection;
   }
 
@@ -455,45 +175,134 @@ class LocalBridgeService {
     return this.connection?.connected ?? false;
   }
 
-  getConnectionStatus(): { 
-    connected: boolean; 
-    url?: string; 
-    projectName?: string; 
-    lastHealthCheck?: number;
-    timeSinceLastCheck?: number;
-  } {
-    if (!this.connection) {
-      return { connected: false };
+  async makeRequest<T = any>(
+    endpoint: string, 
+    options: RequestInit = {}
+  ): Promise<{ success: boolean; data?: T; error?: string }> {
+    if (!this.connection?.connected) {
+      return { success: false, error: 'No active connection to local CLI' };
     }
 
-    const timeSinceLastCheck = this.connection.lastHealthCheck 
-      ? Date.now() - this.connection.lastHealthCheck 
-      : undefined;
+    try {
+      const url = `${this.connection.url}${endpoint}`;
+      const response = await this.timeout(
+        fetch(url, {
+          ...options,
+          headers: {
+            'Authorization': `Bearer ${this.connection.token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...options.headers
+          }
+        })
+      );
 
-    return {
-      connected: this.connection.connected,
-      url: this.connection.url,
-      projectName: this.connection.projectInfo?.name,
-      lastHealthCheck: this.connection.lastHealthCheck,
-      timeSinceLastCheck
-    };
+      if (!response.ok) {
+        return { 
+          success: false, 
+          error: `Request failed: ${response.status} ${response.statusText}` 
+        };
+      }
+
+      const data = await response.json();
+      return { success: true, data };
+
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      };
+    }
+  }
+
+  async executeTestRemotely(
+    testPath: string, 
+    config: any
+  ): Promise<{ success: boolean; output?: string; error?: string; reportId?: string }> {
+    try {
+      const result = await this.timeout(
+        this.makeRequest('/api/execute-test', {
+          method: 'POST',
+          body: JSON.stringify({ testPath, config })
+        }),
+        this.OPERATION_TIMEOUT_MS
+      );
+
+      if (!result.success) {
+        return { success: false, error: result.error };
+      }
+
+      return result.data;
+    } catch (error) {
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Test execution timeout' 
+      };
+    }
+  }
+
+  async getTestFiles(): Promise<{ success: boolean; files?: any[]; error?: string }> {
+    const result = await this.makeRequest('/api/test-files');
+    
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    return { success: true, files: result.data?.files || [] };
+  }
+
+  async saveTestFile(
+    content: string, 
+    filename: string, 
+    tabId?: string
+  ): Promise<{ success: boolean; path?: string; error?: string }> {
+    const result = await this.makeRequest('/api/save-test', {
+      method: 'POST',
+      body: JSON.stringify({ content, filename, tabId })
+    });
+
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    return { success: true, path: result.data?.path };
+  }
+
+  async deleteTestFile(testPath: string): Promise<{ success: boolean; error?: string }> {
+    const result = await this.makeRequest('/api/delete-test', {
+      method: 'DELETE',
+      body: JSON.stringify({ testPath })
+    });
+
+    return { success: result.success, error: result.error };
+  }
+
+  async getReports(): Promise<{ success: boolean; reports?: any[]; error?: string }> {
+    const result = await this.makeRequest('/api/reports');
+    
+    if (!result.success) {
+      return { success: false, error: result.error };
+    }
+
+    return { success: true, reports: result.data?.reports || [] };
+  }
+
+  async deleteReport(reportId: string): Promise<{ success: boolean; error?: string }> {
+    const result = await this.makeRequest(`/api/reports/${reportId}`, {
+      method: 'DELETE'
+    });
+
+    return { success: result.success, error: result.error };
   }
 
   disconnect(): void {
-    this.stopHealthChecks();
-    this.connection = null;
-    
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('raiken_bridge_connection');
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
     }
-  }
-
-  // Force a fresh connection attempt
-  async reconnect(): Promise<LocalBridgeConnection | null> {
-    this.disconnect();
-    return await this.detectLocalCLI();
+    
+    this.connection = null;
   }
 }
 
-// Singleton instance
-export const localBridge = new LocalBridgeService(); 
+export const localBridgeService = new LocalBridgeService();

@@ -1,10 +1,9 @@
-// Cloud relay bridge for enterprise/strict network environments
-
 interface RelayConnection {
   sessionId: string;
   connected: boolean;
   ws: WebSocket | null;
   lastPing?: number;
+  url?: string;
 }
 
 interface RelayMessage {
@@ -19,10 +18,10 @@ interface RelayMessage {
 class RelayBridgeService {
   private connection: RelayConnection | null = null;
   private readonly RELAY_URL = process.env.NEXT_PUBLIC_RELAY_URL || 'ws://84.46.245.248:3001/bridge';
-  private readonly PING_INTERVAL = 30000; // 30 seconds
-  private readonly TIMEOUT_MS = 8000;
+  private readonly PING_INTERVAL = 30000;
+  private readonly TIMEOUT_MS = 10000; // Increased to 10s for WebSocket
   private pingTimer: NodeJS.Timeout | null = null;
-  private pendingRequests = new Map<string, (result: any) => void>();
+  private pendingRequests = new Map<string, { resolve: (result: any) => void; reject: (error: any) => void }>();
 
   private generateId(): string {
     return Math.random().toString(36).substring(2) + Date.now().toString(36);
@@ -49,96 +48,111 @@ class RelayBridgeService {
         const sessionId = this.getOrCreateSessionId();
         const wsUrl = `${this.RELAY_URL}?role=web&session=${encodeURIComponent(sessionId)}`;
         
-        console.log('🌐 Connecting to relay bridge...', wsUrl);
-        
         const ws = new WebSocket(wsUrl);
         
-        ws.onopen = () => {
-          console.log('✓ Connected to relay bridge');
-          this.connection = {
-            sessionId,
-            connected: true,
-            ws,
-            lastPing: Date.now()
-          };
-          
-          this.startPingTimer();
-          resolve(true);
+        this.connection = {
+          sessionId,
+          connected: false,
+          ws,
+          url: wsUrl
         };
 
-        ws.onmessage = (event) => {
-          try {
-            const message: RelayMessage = JSON.parse(event.data);
-            this.handleMessage(message);
-          } catch (error) {
-            console.warn('Invalid relay message:', event.data);
-          }
-        };
-
-        ws.onclose = () => {
-          console.log('🔄 Relay connection closed');
-          this.connection = null;
-          this.stopPingTimer();
-          resolve(false);
-        };
-
-        ws.onerror = (error) => {
-          console.error('❌ Relay connection error:', error);
-          this.connection = null;
-          this.stopPingTimer();
-          resolve(false);
-        };
-
-        // Timeout for connection
-        setTimeout(() => {
+        const connectionTimeout = setTimeout(() => {
           if (!this.connection?.connected) {
             ws.close();
             resolve(false);
           }
-        }, 5000);
+        }, this.TIMEOUT_MS);
 
-      } catch (error) {
-        console.error('Failed to create relay connection:', error);
+        ws.onopen = () => {
+          clearTimeout(connectionTimeout);
+          if (this.connection) {
+            this.connection.connected = true;
+            this.startPingTimer();
+          }
+          resolve(true);
+        };
+
+        ws.onmessage = (event) => {
+          this.handleMessage(event.data);
+        };
+
+        ws.onclose = () => {
+          clearTimeout(connectionTimeout);
+          this.handleDisconnection();
+          resolve(false);
+        };
+
+        ws.onerror = () => {
+          clearTimeout(connectionTimeout);
+          this.handleDisconnection();
+          resolve(false);
+        };
+
+      } catch {
         resolve(false);
       }
     });
   }
 
-  private handleMessage(message: RelayMessage): void {
-    if (message.type === 'pong') {
-      if (this.connection) {
-        this.connection.lastPing = Date.now();
+  private handleMessage(data: string): void {
+    try {
+      const message: RelayMessage = JSON.parse(data);
+      
+      if (message.type === 'ping') {
+        this.sendMessage({ id: message.id, type: 'pong' });
+        return;
       }
-      return;
-    }
 
-    if (message.id && this.pendingRequests.has(message.id)) {
-      const resolve = this.pendingRequests.get(message.id)!;
-      this.pendingRequests.delete(message.id);
-      resolve(message);
+      if (message.type === 'pong' && this.connection) {
+        this.connection.lastPing = Date.now();
+        return;
+      }
+
+      if (message.type === 'rpc') {
+        const pending = this.pendingRequests.get(message.id);
+        if (pending) {
+          this.pendingRequests.delete(message.id);
+          
+          if (message.error) {
+            pending.reject(new Error(message.error));
+          } else {
+            pending.resolve(message.result);
+          }
+        }
+      }
+    } catch {
+      // Ignore malformed messages
+    }
+  }
+
+  private handleDisconnection(): void {
+    if (this.connection) {
+      this.connection.connected = false;
+    }
+    
+    this.stopPingTimer();
+    
+    // Reject all pending requests
+    for (const [id, pending] of this.pendingRequests) {
+      pending.reject(new Error('Connection lost'));
+    }
+    this.pendingRequests.clear();
+  }
+
+  private sendMessage(message: RelayMessage): void {
+    if (this.connection?.ws?.readyState === WebSocket.OPEN) {
+      this.connection.ws.send(JSON.stringify(message));
     }
   }
 
   private startPingTimer(): void {
-    if (this.pingTimer) {
-      clearInterval(this.pingTimer);
-    }
-
     this.pingTimer = setInterval(() => {
-      if (this.connection?.ws && this.connection.connected) {
-        const pingMessage: RelayMessage = {
+      if (this.connection?.connected) {
+        this.sendMessage({
           id: this.generateId(),
           type: 'ping'
-        };
-        
-        this.connection.ws.send(JSON.stringify(pingMessage));
-        
-        // Check if we haven't received a pong in too long
-        const timeSinceLastPing = Date.now() - (this.connection.lastPing || 0);
-        if (timeSinceLastPing > this.PING_INTERVAL * 2) {
-          console.warn('🔄 Relay connection seems stale, reconnecting...');
-          this.disconnect();
-        }
+        });
       }
     }, this.PING_INTERVAL);
   }
@@ -150,38 +164,47 @@ class RelayBridgeService {
     }
   }
 
-  async rpc(method: string, params: any): Promise<any> {
+  async sendRPC(method: string, params: any): Promise<any> {
     if (!this.connection?.connected) {
-      const connected = await this.connect();
-      if (!connected) {
-        throw new Error('Failed to connect to relay');
-      }
+      throw new Error('Not connected to relay server');
     }
 
     return new Promise((resolve, reject) => {
       const id = this.generateId();
-      const message: RelayMessage = {
+      
+      this.pendingRequests.set(id, { resolve, reject });
+      
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error('RPC timeout'));
+      }, this.TIMEOUT_MS);
+
+      this.pendingRequests.set(id, {
+        resolve: (result) => {
+          clearTimeout(timeout);
+          resolve(result);
+        },
+        reject: (error) => {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+
+      this.sendMessage({
         id,
         type: 'rpc',
         method,
         params
-      };
-
-      this.pendingRequests.set(id, resolve);
-      
-      // Set timeout
-      setTimeout(() => {
-        if (this.pendingRequests.delete(id)) {
-          reject(new Error('Relay request timeout'));
-        }
-      }, this.TIMEOUT_MS);
-
-      if (this.connection?.ws) {
-        this.connection.ws.send(JSON.stringify(message));
-      } else {
-        reject(new Error('No relay connection'));
-      }
+      });
     });
+  }
+
+  getStatus(): { connected: boolean; sessionId?: string; url?: string } {
+    return {
+      connected: this.connection?.connected ?? false,
+      sessionId: this.connection?.sessionId,
+      url: this.connection?.url
+    };
   }
 
   disconnect(): void {
@@ -192,17 +215,13 @@ class RelayBridgeService {
     }
     
     this.connection = null;
+    
+    // Clear all pending requests
+    for (const [id, pending] of this.pendingRequests) {
+      pending.reject(new Error('Disconnected'));
+    }
     this.pendingRequests.clear();
-  }
-
-  isConnected(): boolean {
-    return this.connection?.connected ?? false;
-  }
-
-  getSessionId(): string | null {
-    return this.connection?.sessionId || null;
   }
 }
 
-// Singleton instance
-export const relayBridge = new RelayBridgeService();
+export const relayBridgeService = new RelayBridgeService();

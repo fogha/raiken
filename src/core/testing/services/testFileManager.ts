@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { localBridge } from '@/lib/local-bridge';
+import { localBridgeServiceService } from '@/lib/local-bridge';
 
 // Directory for test scripts
 export const TEST_SCRIPTS_DIR = 'generated-tests';
@@ -12,14 +12,10 @@ export interface TestFile {
 }
 
 export async function saveTestScript(name: string, content: string, tabId?: string): Promise<string> {
-  // First, try to save via local bridge - detect if not already connected
-  let bridgeConnection = localBridge.getConnectionInfo();
-  if (!bridgeConnection) {
-    console.log(`[Raiken] No bridge connection found, attempting to detect local CLI...`);
-    bridgeConnection = await localBridge.detectLocalCLI();
-  }
+  // First, try to save via local bridge - use unified bridge service
+  let bridgeConnection = localBridgeService.getConnection();
 
-  if (bridgeConnection && localBridge.isConnected()) {
+  if (bridgeConnection && localBridgeService.isConnected()) {
     try {
       // Generate safe filename for bridge
       const safeName = name
@@ -31,7 +27,7 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
       const filename = tabId ? `${safeName}_${tabId}.spec.ts` : `${safeName}.spec.ts`;
       
       console.log(`[Raiken] Attempting to save to local bridge: ${filename}`);
-      const result = await localBridge.saveTestToLocal(content, filename, tabId);
+      const result = await localBridgeService.saveTestToLocal(content, filename, tabId);
       
       if (result.success && result.path) {
         console.log(`[Raiken] Test script saved to local project: ${result.path}`);
