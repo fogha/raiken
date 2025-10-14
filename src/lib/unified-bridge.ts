@@ -1,7 +1,5 @@
-// Unified bridge service that tries local first, then falls back to relay
-
-import { localBridge } from './local-bridge';
-import { relayBridge } from './relay-bridge';
+import { localBridgeService } from './local-bridge';
+import { relayBridgeService } from './relay-bridge';
 
 export type BridgeMode = 'local' | 'relay' | 'none';
 
@@ -20,213 +18,197 @@ export interface BridgeStatus {
   };
 }
 
+interface BridgeRPC {
+  mode: BridgeMode;
+  rpc: (method: string, params: any) => Promise<any>;
+}
+
 class UnifiedBridgeService {
   private currentMode: BridgeMode = 'none';
-  private fallbackAttempted = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectTimer: NodeJS.Timeout | null = null;
+  private cachedBridge: BridgeRPC | null = null;
+  private lastBridgeCheck = 0;
+  private readonly BRIDGE_CACHE_TTL = 5000; // 5 seconds
 
-  async getBridge(): Promise<{ mode: BridgeMode; rpc: (method: string, params: any) => Promise<any> } | null> {
-    // Try local bridge first
-    try {
-      const localConnection = await localBridge.ensureConnection();
-      if (localConnection) {
-        this.currentMode = 'local';
-        console.log('✓ Using local bridge mode');
-        
-        return {
-          mode: 'local',
-          rpc: async (method: string, params: any) => {
-            switch (method) {
-              case 'saveTest':
-                return await localBridge.saveTestToLocal(params.content, params.filename, params.tabId);
-              case 'executeTest':
-                return await localBridge.executeTestRemotely(params.testPath, params.config);
-              case 'getTestFiles':
-                return await localBridge.getLocalTestFiles();
-              case 'getReports':
-                return await localBridge.getLocalReports();
-              case 'deleteReport':
-                return await localBridge.deleteLocalReport(params.reportId);
-              default:
-                throw new Error(`Unknown method: ${method}`);
-            }
-          }
-        };
-      }
-    } catch (error) {
-      console.log('⚠️ Local bridge not available:', error instanceof Error ? error.message : error);
+  async getBridge(): Promise<BridgeRPC | null> {
+    // Return cached bridge if it's still valid
+    if (this.cachedBridge && (Date.now() - this.lastBridgeCheck) < this.BRIDGE_CACHE_TTL) {
+      return this.cachedBridge;
     }
 
-    // Fallback to relay bridge
-    if (!this.fallbackAttempted) {
-      this.fallbackAttempted = true;
-      console.log('🌐 Falling back to relay bridge...');
-      
-      try {
-        const connected = await relayBridge.connect();
-        if (connected) {
-          this.currentMode = 'relay';
-          console.log('✓ Using relay bridge mode');
-          
-          return {
-            mode: 'relay',
-            rpc: async (method: string, params: any) => {
-              return await relayBridge.rpc(method, params);
-            }
-          };
-        }
-      } catch (error) {
-        console.log('❌ Relay bridge failed:', error instanceof Error ? error.message : error);
+    // Only try local bridge if we don't already have a connection
+    if (this.currentMode === 'none' || !localBridgeService.isConnected()) {
+      const localBridge = await this.tryLocalBridge();
+      if (localBridge) {
+        this.cachedBridge = localBridge;
+        this.lastBridgeCheck = Date.now();
+        return localBridge;
       }
+    } else if (this.currentMode === 'local' && localBridgeService.isConnected()) {
+      // Reuse existing local connection
+      const localBridge = {
+        mode: 'local' as const,
+        rpc: this.createLocalRPC()
+      };
+      this.cachedBridge = localBridge;
+      this.lastBridgeCheck = Date.now();
+      return localBridge;
     }
 
-    this.currentMode = 'none';
+    const relayBridge = await this.tryRelayBridge();
+    if (relayBridge) {
+      this.cachedBridge = relayBridge;
+      this.lastBridgeCheck = Date.now();
+      return relayBridge;
+    }
+
+    this.cachedBridge = null;
     return null;
   }
 
-  async saveTest(content: string, filename: string, tabId?: string): Promise<{ success: boolean; path?: string; error?: string }> {
-    const bridge = await this.getBridge();
-    if (!bridge) {
-      return {
-        success: false,
-        error: 'No bridge connection available. Please run "raiken start" in your project directory or check your network connection.'
-      };
-    }
-
+  private async tryLocalBridge(): Promise<BridgeRPC | null> {
     try {
-      return await bridge.rpc('saveTest', { content, filename, tabId });
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      const connection = await localBridgeService.detectLocalCLI();
+      if (connection) {
+        this.currentMode = 'local';
+        this.reconnectAttempts = 0;
+        
+        return {
+          mode: 'local',
+          rpc: this.createLocalRPC()
+        };
+      }
+    } catch {
+      // Local bridge failed, try relay
     }
+    
+    return null;
   }
 
-  async executeTest(testPath: string, config: any): Promise<{ success: boolean; output?: string; error?: string }> {
-    const bridge = await this.getBridge();
-    if (!bridge) {
-      return {
-        success: false,
-        error: 'No bridge connection available'
-      };
-    }
-
+  private async tryRelayBridge(): Promise<BridgeRPC | null> {
     try {
-      return await bridge.rpc('executeTest', { testPath, config });
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
+      const connection = await relayBridgeService.connect();
+      if (connection) {
+        this.currentMode = 'relay';
+        this.reconnectAttempts = 0;
+        
+        return {
+          mode: 'relay',
+          rpc: this.createRelayRPC()
+        };
+      }
+    } catch {
+      // Both bridges failed
     }
+    
+    return null;
   }
 
-  async getTestFiles(): Promise<{ success: boolean; files?: any[]; error?: string }> {
-    const bridge = await this.getBridge();
-    if (!bridge) {
-      return {
-        success: false,
-        error: 'No bridge connection available'
+  private createLocalRPC() {
+    return async (method: string, params: any) => {
+      const methodMap: Record<string, () => Promise<any>> = {
+        saveTest: () => localBridgeService.saveTestFile(params.content, params.filename, params.tabId),
+        executeTest: () => localBridgeService.executeTestRemotely(params.testPath, params.config),
+        getTestFiles: () => localBridgeService.getTestFiles(),
+        getReports: () => localBridgeService.getReports(),
+        deleteReport: () => localBridgeService.deleteReport(params.reportId),
+        deleteTest: () => localBridgeService.deleteTestFile(params.testPath)
       };
-    }
 
-    try {
-      return await bridge.rpc('getTestFiles', {});
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+      const handler = methodMap[method];
+      if (!handler) {
+        throw new Error(`Unknown method: ${method}`);
+      }
+
+      return await handler();
+    };
   }
 
-  async getReports(): Promise<{ success: boolean; reports?: any[]; error?: string }> {
-    const bridge = await this.getBridge();
-    if (!bridge) {
-      return {
-        success: false,
-        error: 'No bridge connection available'
-      };
-    }
-
-    try {
-      return await bridge.rpc('getReports', {});
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
-  }
-
-  async deleteReport(reportId: string): Promise<{ success: boolean; error?: string }> {
-    const bridge = await this.getBridge();
-    if (!bridge) {
-      return {
-        success: false,
-        error: 'No bridge connection available'
-      };
-    }
-
-    try {
-      return await bridge.rpc('deleteReport', { reportId });
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
-      };
-    }
+  private createRelayRPC() {
+    return async (method: string, params: any) => {
+      return await relayBridgeService.sendRPC(method, params);
+    };
   }
 
   getStatus(): BridgeStatus {
-    switch (this.currentMode) {
-      case 'local':
-        const localStatus = localBridge.getConnectionStatus();
-        const localConnection = localBridge.getConnectionInfo();
-        return {
-          mode: 'local',
-          connected: localStatus.connected,
-          url: localStatus.url,
-          projectName: localStatus.projectName,
-          lastHealthCheck: localStatus.lastHealthCheck,
-          projectInfo: localConnection?.projectInfo
-        };
-      
-      case 'relay':
-        return {
-          mode: 'relay',
-          connected: relayBridge.isConnected(),
-          sessionId: relayBridge.getSessionId() || undefined
-        };
-      
-      default:
-        return {
-          mode: 'none',
-          connected: false
-        };
+    const baseStatus: BridgeStatus = {
+      mode: this.currentMode,
+      connected: false
+    };
+
+    if (this.currentMode === 'local') {
+      const connection = localBridgeService.getConnection();
+      return {
+        ...baseStatus,
+        connected: localBridgeService.isConnected(),
+        url: connection?.url,
+        projectName: connection?.projectInfo?.project?.name,
+        lastHealthCheck: connection?.lastHealthCheck,
+        projectInfo: connection?.projectInfo?.project
+      };
     }
+
+    if (this.currentMode === 'relay') {
+      const status = relayBridgeService.getStatus();
+      return {
+        ...baseStatus,
+        connected: status.connected,
+        sessionId: status.sessionId,
+        url: status.url
+      };
+    }
+
+    return baseStatus;
   }
 
   async reconnect(): Promise<boolean> {
-    this.fallbackAttempted = false;
-    this.currentMode = 'none';
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      return false;
+    }
+
+    this.reconnectAttempts++;
     
-    // Disconnect existing connections
-    localBridge.disconnect();
-    relayBridge.disconnect();
-    
-    // Try to establish new connection
     const bridge = await this.getBridge();
-    return bridge !== null;
+    if (bridge) {
+      this.reconnectAttempts = 0;
+      return true;
+    }
+
+    this.scheduleReconnect();
+    return false;
+  }
+
+  private scheduleReconnect(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+    }
+
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
+    
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnect();
+    }, delay);
   }
 
   disconnect(): void {
-    localBridge.disconnect();
-    relayBridge.disconnect();
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
+    if (this.currentMode === 'local') {
+      localBridgeService.disconnect();
+    } else if (this.currentMode === 'relay') {
+      relayBridgeService.disconnect();
+    }
+
     this.currentMode = 'none';
-    this.fallbackAttempted = false;
+    this.reconnectAttempts = 0;
+    this.cachedBridge = null;
+    this.lastBridgeCheck = 0;
   }
 }
 
-// Singleton instance
-export const unifiedBridge = new UnifiedBridgeService();
+export const unifiedBridgeService = new UnifiedBridgeService();
