@@ -139,11 +139,16 @@ export class LocalFileSystemAdapter {
   }
 
   private normalizeTestFilename(filename: string): string {
-    if (!filename.endsWith('.spec.ts') && !filename.endsWith('.test.ts')) {
-      filename = filename.replace(/\.(js|ts)$/, '') + '.spec.ts';
-    }
-
-    return filename.replace(/[^a-zA-Z0-9.-]/g, '_');
+    // Remove any existing test extensions first
+    let normalizedName = filename
+      .replace(/\.(spec|test)\.(ts|js)$/, '')
+      .replace(/\.(ts|js)$/, '');
+    
+    // Sanitize the base name
+    normalizedName = normalizedName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    
+    // Add the .spec.ts extension
+    return `${normalizedName}.spec.ts`;
   }
 
   async deleteTestFile(testPath: string): Promise<void> {
