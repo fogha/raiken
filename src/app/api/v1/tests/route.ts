@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { OpenRouterService } from '@/core/testing/services/openrouter.service';
 import * as testFileManager from '@/core/testing/services/testFileManager';
 import { TestSuiteManager } from '@/core/testing/services/testSuite';
-import { localBridgeServiceService } from '@/lib/local-bridge';
+import { localBridgeService } from '@/lib/local-bridge';
 
 /**
  * Unified Tests API Handler
@@ -318,7 +318,7 @@ async function handleGetReports(params: any) {
     // Check if we should use local bridge
     if (localBridgeService.isConnected()) {
       console.log('[Raiken] 📊 Loading reports via local CLI...');
-      const bridgeResult = await localBridgeService.getLocalReports();
+      const bridgeResult = await localBridgeService.getReports();
       if (bridgeResult.success && bridgeResult.reports) {
         reports = bridgeResult.reports;
         console.log(`[Raiken] ✅ Loaded ${reports.length} reports from local project`);
@@ -359,7 +359,7 @@ async function handleDeleteReport(params: any) {
     // Check if we should use local bridge
     if (localBridgeService.isConnected()) {
       console.log(`[Raiken] 🗑️ Deleting report via local CLI: ${id}`);
-      const bridgeResult = await localBridgeService.deleteLocalReport(id);
+      const bridgeResult = await localBridgeService.deleteReport(id);
       if (bridgeResult.success) {
         console.log(`[Raiken] ✅ Report deleted from local project: ${id}`);
         return NextResponse.json({ success: true });

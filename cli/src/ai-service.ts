@@ -30,7 +30,7 @@ export class AIService {
 
   async analyzeTestFailure(request: AIAnalysisRequest): Promise<AIAnalysisResponse> {
     if (!this.apiKey) {
-      console.warn('OPENROUTER_API_KEY not found. Skipping AI analysis.');
+      console.warn('[AI Service] OPENROUTER_API_KEY not found. Skipping AI analysis.');
       return {
         summary: 'AI analysis unavailable - API key not configured',
         suggestions: 'Configure OPENROUTER_API_KEY environment variable to enable AI-powered test failure analysis',

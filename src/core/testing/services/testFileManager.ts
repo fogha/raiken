@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { localBridgeServiceService } from '@/lib/local-bridge';
+import { localBridgeService } from '@/lib/local-bridge';
 
 // Directory for test scripts
 export const TEST_SCRIPTS_DIR = 'generated-tests';
@@ -27,7 +27,7 @@ export async function saveTestScript(name: string, content: string, tabId?: stri
       const filename = tabId ? `${safeName}_${tabId}.spec.ts` : `${safeName}.spec.ts`;
       
       console.log(`[Raiken] Attempting to save to local bridge: ${filename}`);
-      const result = await localBridgeService.saveTestToLocal(content, filename, tabId);
+      const result = await localBridgeService.saveTestFile(content, filename, tabId);
       
       if (result.success && result.path) {
         console.log(`[Raiken] Test script saved to local project: ${result.path}`);

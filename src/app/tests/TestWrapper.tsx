@@ -161,7 +161,7 @@ const TestsPage: React.FC<TestsPageProps> = ({ children }) => {
                         <div className="w-full h-full">
                           <div className="w-full h-full flex flex-col">
                             {/* Tab header */}
-                            <div className="bg-muted h-10 flex items-center px-3 relative">
+                            <div className="bg-muted h-[64px] flex items-center px-3 relative">
                               <div className="flex gap-2 h-full border-0 bg-transparent p-0">
                                 <Link href='/tests/editor' className="shadow-none px-3 h-full text-sm flex items-center rounded-none border-b-0 data-[state=active]:border-b-[3px] data-[state=active]:border-foreground data-[state=active]:font-medium data-[state=inactive]:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0 hover:outline-none hover:ring-0 data-[state=active]:bg-transparent relative z-10">
                                   Test Editor
@@ -177,7 +177,7 @@ const TestsPage: React.FC<TestsPageProps> = ({ children }) => {
                               <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-border"></div>
                             </div>
 
-                            <div className="flex-1 overflow-auto">
+                            <div className="flex-1">
                               {children}
                             </div>
                           </div>
@@ -195,27 +195,22 @@ const TestsPage: React.FC<TestsPageProps> = ({ children }) => {
             <ResizablePanel defaultSize={30} minSize={20} maxSize={40}>
               <div className="h-full flex flex-col bg-background">
                 <nav className="flex items-center justify-end h-12 gap-1.5">
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground">
+                  <Link href="https://raiken-docs.vercel.app/" className="h-7 flex items-center px-2 text-muted-foreground hover:text-foreground">
                     <BookOpen className="h-3.5 w-3.5 mr-1" />
                     <span className="hidden sm:inline text-xs">Docs</span>
-                  </Button>
-                  <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground hover:text-foreground">
+                  </Link>
+                  <Link href="https://github.com/fogha/raiken" className="h-7 px-2 flex items-center text-muted-foreground hover:text-foreground">
                     <Github className="h-3.5 w-3.5 mr-1" />
                     <span className="hidden sm:inline text-xs">GitHub</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={() => window.location.href = '/settings'}
-                    size="sm"
-                    className="h-7 px-2 text-muted-foreground hover:text-foreground"
-                  >
+                  </Link>
+                  <Link href="/settings" className="h-7 flex items-center px-2 text-muted-foreground hover:text-foreground">
                     <Settings className="h-3.5 w-3.5 mr-1" />
                     <span className="hidden sm:inline text-xs">Settings</span>
-                  </Button>
+                  </Link>
                   <ThemeToggle />
                 </nav>
                 {/* Tab navigation */}
-                <div className="bg-muted border-b border-border h-10 flex items-center px-3 mt-[1px]">
+                <div className="bg-muted border-b border-border h-[64px] flex items-center px-3 mt-[1px]">
                   <div className="flex gap-2 h-full">
                     <button
                       className="px-3 h-full text-sm flex items-center border-b-2 border-primary font-medium"

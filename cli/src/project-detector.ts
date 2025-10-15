@@ -34,6 +34,23 @@ export interface TestReport {
   error?: string;
   config: any;
   results?: any;
+  artifacts?: Array<{
+    name: string;
+    contentType: string;
+    path: string;
+    relativePath: string;
+    url: string;
+  }>;
+  aiAnalysis?: {
+    summary: string;
+    rootCause: string;
+    suggestions: string;
+    recommendations: string[];
+    confidence: number;
+  };
+  summary?: {
+    duration: number;
+  };
 }
 
 export async function detectProject(projectPath: string): Promise<ProjectInfo> {
@@ -45,10 +62,11 @@ export async function detectProject(projectPath: string): Promise<ProjectInfo> {
   const scripts = packageJson.scripts || {};
   const allDeps = { ...dependencies, ...devDependencies };
 
-  const [projectType, packageManager, testDir, configFiles] = await Promise.all([
-    detectProjectType(allDeps),
+  const projectType = await detectProjectType(allDeps);
+  
+  const [packageManager, testDir, configFiles] = await Promise.all([
     detectPackageManager(projectPath),
-    detectTestDirectory(projectPath, detectProjectType(allDeps)),
+    detectTestDirectory(projectPath, projectType),
     findConfigFiles(projectPath)
   ]);
   

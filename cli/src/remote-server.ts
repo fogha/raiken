@@ -234,26 +234,74 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
 
   // Test execution endpoint
   app.post('/api/execute-test', async (req: Request, res: Response) => {
+    let hasResponded = false;
+    
+    // Set a timeout to ensure we always respond
+    const responseTimeout = setTimeout(() => {
+      if (!hasResponded) {
+        hasResponded = true;
+        console.error('[CLI] Test execution timeout - sending timeout response');
+        res.status(500).json({ 
+          success: false, 
+          error: 'Test execution timeout',
+          reportId: 'timeout'
+        });
+      }
+    }, 150000); // 2.5 minute timeout
+    
     try {
       const { testPath, config } = req.body;
       
       if (!testPath) {
-        return res.status(400).json({ error: 'testPath is required' });
+        clearTimeout(responseTimeout);
+        if (!hasResponded) {
+          hasResponded = true;
+          return res.status(400).json({ error: 'testPath is required' });
+        }
+        return;
       }
       
-      console.log(`${chalk.green('🧪 Executing test:')} ${testPath}`);
-      console.log(`${chalk.gray('   Config:')} ${JSON.stringify(config, null, 2)}`);
+      console.log(`[CLI] Executing test: ${testPath}`);
+      console.log(`[CLI] Config: ${JSON.stringify(config, null, 2)}`);
+      console.log(`[CLI] Project path: ${fsAdapter.projectPath}`);
+      console.log(`[CLI] Test directory: ${fsAdapter.testDirectory}`);
       
       // Execute test using the filesystem adapter
+      console.log(`[CLI] Starting test execution...`);
       const result = await fsAdapter.executeTest(testPath, config);
-      
-      res.json(result);
-    } catch (error) {
-      console.error('Failed to execute test:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Failed to execute test' 
+      console.log(`[CLI] Test execution completed with result:`, {
+        success: result.success,
+        hasOutput: !!result.output,
+        outputLength: result.output?.length || 0,
+        hasError: !!result.error,
+        errorMessage: result.error,
+        reportId: result.reportId
       });
+      
+      clearTimeout(responseTimeout);
+      if (!hasResponded) {
+        hasResponded = true;
+        console.log(`[CLI] Test execution completed, sending response:`, {
+          success: result.success,
+          hasOutput: !!result.output,
+          hasError: !!result.error,
+          reportId: result.reportId
+        });
+        res.json(result);
+      }
+    } catch (error) {
+      clearTimeout(responseTimeout);
+      console.error('[CLI] Test execution failed with error:', error);
+      console.error('[CLI] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      
+      if (!hasResponded) {
+        hasResponded = true;
+        res.status(500).json({ 
+          success: false, 
+          error: error instanceof Error ? error.message : 'Failed to execute test',
+          reportId: 'execution-error'
+        });
+      }
     }
   });
 
@@ -280,26 +328,61 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 
   // Serve test artifacts (screenshots, videos, traces)
-  app.get('/api/artifacts/*', (req: Request, res: Response) => {
+  app.get('/api/artifacts/*', async (req: Request, res: Response) => {
     console.log(`[Artifacts] Request received: ${req.method} ${req.path} ${req.url}`);
     try {
-      const artifactPath = req.params[0];
-      const fullPath = path.join(projectPath, 'test-results', artifactPath);
+      const artifactPath = decodeURIComponent(req.params[0]);
+      const fullPath = path.join(projectPath, artifactPath);
       
-      // Security check - ensure path is within test-results
+      console.log(`[Artifacts] Serving artifact: ${artifactPath}`);
+      console.log(`[Artifacts] Full path: ${fullPath}`);
+      
+      // Security check - ensure path is within project directory
       const resolvedPath = path.resolve(fullPath);
-      const testResultsPath = path.resolve(projectPath, 'test-results');
+      const projectDir = path.resolve(projectPath);
       
-      if (!resolvedPath.startsWith(testResultsPath)) {
-        console.log(`[Artifacts] Access denied: ${resolvedPath} not in ${testResultsPath}`);
+      if (!resolvedPath.startsWith(projectDir)) {
+        console.log(`[Artifacts] Access denied: ${resolvedPath} not in ${projectDir}`);
         return res.status(403).json({ error: 'Access denied' });
       }
+      
+      // Check if file exists
+      try {
+        const fs = require('fs/promises');
+        await fs.access(resolvedPath);
+        const stats = await fs.stat(resolvedPath);
+        
+        if (!stats.isFile()) {
+          return res.status(404).json({ error: 'Artifact is not a file' });
+        }
+      } catch {
+        console.error(`[Artifacts] File not found: ${resolvedPath}`);
+        return res.status(404).json({ error: 'Artifact not found' });
+      }
+      
+      // Set appropriate headers based on file type
+      const ext = path.extname(resolvedPath).toLowerCase();
+      const contentTypeMap: Record<string, string> = {
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.webm': 'video/webm',
+        '.mp4': 'video/mp4',
+        '.zip': 'application/zip',
+        '.json': 'application/json',
+        '.txt': 'text/plain',
+        '.md': 'text/markdown'
+      };
+      
+      const contentType = contentTypeMap[ext] || 'application/octet-stream';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
       
       console.log(`[Artifacts] Serving: ${artifactPath} from ${fullPath}`);
       res.sendFile(resolvedPath);
     } catch (error) {
       console.error('[Artifacts] Failed to serve artifact:', error);
-      res.status(404).json({ error: 'Artifact not found' });
+      res.status(500).json({ error: 'Failed to serve artifact' });
     }
   });
 

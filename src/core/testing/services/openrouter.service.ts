@@ -167,12 +167,38 @@ export class OpenRouterService {
         throw new Error('No test script generated in the response');
       }
       
+      // Clean up the generated script by removing markdown code fences
+      const cleanedScript = this.cleanGeneratedScript(generatedScript);
+      
       console.log('[Raiken] Test script generated successfully');
-      return generatedScript;
+      return cleanedScript;
     } catch (error) {
       console.error('[Raiken] Error generating test script:', error);
       throw new Error(`Failed to generate test script: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+  
+  /**
+   * Clean up the generated script by removing markdown code fences and other artifacts
+   */
+  private cleanGeneratedScript(script: string): string {
+    let cleaned = script.trim();
+    
+    // Remove markdown code fences (```typescript, ```javascript, ```)
+    cleaned = cleaned.replace(/^```(?:typescript|javascript|ts|js)?\s*\n/gm, '');
+    cleaned = cleaned.replace(/\n```\s*$/gm, '');
+    cleaned = cleaned.replace(/^```\s*$/gm, '');
+    
+    // Remove any remaining leading/trailing whitespace
+    cleaned = cleaned.trim();
+    
+    // Ensure the script starts with proper imports if it doesn't already
+    if (!cleaned.includes("import") && !cleaned.includes("require")) {
+      console.log('[Raiken] Adding missing Playwright imports to generated script');
+      cleaned = `import { test, expect } from '@playwright/test';\n\n${cleaned}`;
+    }
+    
+    return cleaned;
   }
   
   /**

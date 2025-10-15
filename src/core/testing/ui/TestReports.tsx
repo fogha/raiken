@@ -2,21 +2,50 @@
 
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { RefreshCw, Trash2, Clock, ChevronDown, ChevronRight, Camera, Video, FileText, Bug, AlertTriangle, Brain, Lightbulb, Target } from 'lucide-react';
+import { RefreshCw, Trash2, Clock, ChevronDown, ChevronRight, Camera, Video, FileText, Bug, AlertTriangle, Brain, Lightbulb, Target, CheckCircle, XCircle, Pause, Zap, Eye, Download, ExternalLink } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
 import { useLocalBridge } from "@/hooks/useLocalBridge";
 
+interface TestReport {
+  id: string;
+  testPath: string;
+  timestamp: string;
+  success: boolean;
+  output: string;
+  error?: string;
+  config: any;
+  results?: any;
+  artifacts?: Array<{
+    name: string;
+    contentType: string;
+    path: string;
+    relativePath: string;
+    url: string;
+  }>;
+  aiAnalysis?: {
+    summary: string;
+    rootCause: string;
+    suggestions: string;
+    recommendations: string[];
+    confidence: number;
+  };
+  summary?: {
+    duration: number;
+  };
+}
 
 export function TestReports() {
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<TestReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
   const [expandedReports, setExpandedReports] = useState<Set<string>>(new Set());
-  const { isConnected, connection, getReports, deleteReport: deleteReportFromBridge } = useLocalBridge();
+  const { isConnected, getReports, connection, deleteReport: deleteReportFromBridge } = useLocalBridge();
 
   // Helper function to get artifact URL based on bridge connection
   const getArtifactUrl = (artifact: any) => {
@@ -37,26 +66,41 @@ export function TestReports() {
     setLoading(true);
     setError(null);
     try {
-      if (isConnected && connection) {
-        // Project-focused: Only fetch from local bridge when connected
-        console.log('[TestReports] Fetching reports from project...');
-        const result = await getReports();
-        
-        if (result.success) {
-          const reports = result.reports || [];
-          console.log(`[TestReports] Found ${reports.length} reports from project`);
-          setReports(Array.isArray(reports) ? reports : []);
-        } else {
-          throw new Error(result.error || 'Failed to fetch project reports');
-        }
+      let result;
+      
+      if (isConnected) {
+        result = await getReports();
       } else {
-        // No project connected - show empty state
-        console.log('[TestReports] No project connected');
-        setReports([]);
+        const response = await fetch('/api/v1/tests?action=reports');
+        
+        if (!response.ok) {
+          throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        result = await response.json();
       }
-    } catch (err) {
-      console.error('Error fetching project reports:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch project reports');
+      
+      if (result?.success) {
+        const reports = result.reports || [];
+        console.log(`[TestReports] Processing ${reports.length} reports`);
+        
+        // Validate reports structure
+        const validReports = reports.filter((report: any) => {
+          const isValid = report && typeof report === 'object' && report.id && report.testPath;
+          if (!isValid) {
+            console.warn('[TestReports] Invalid report structure:', report);
+          }
+          return isValid;
+        });
+        
+        setReports(validReports);
+      } else {
+        const errorMsg = result?.error || 'Unknown error occurred';
+        throw new Error(errorMsg);
+      }
+    } catch (err: any) {
+      console.error('[TestReports] Error fetching reports:', err);
+      setError(err.message || 'Failed to fetch reports');
       setReports([]);
     } finally {
       setLoading(false);
@@ -64,388 +108,466 @@ export function TestReports() {
   };
 
   // Delete report
-  const deleteReport = async (id: string) => {
+  const handleDeleteReport = async (reportId: string) => {
     if (!confirm('Are you sure you want to delete this report?')) return;
 
-    setDeleteLoading(id);
+    setDeleteLoading(reportId);
+    setError(null);
+    
     try {
-      if (isConnected && connection) {
-        console.log('[TestReports] Deleting report from project...');
-        const result = await deleteReportFromBridge(id);
-        
-        if (result.success) {
-          setReports(prev => prev.filter(report => report.id !== id));
-        } else {
-          throw new Error(result.error || 'Failed to delete project report');
-        }
+      let result;
+      
+      if (isConnected) {
+        result = await deleteReportFromBridge(reportId);
       } else {
-        throw new Error('No project connected - cannot delete report');
+        const response = await fetch(`/api/v1/tests`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'delete-report',
+            id: reportId
+          })
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Delete request failed: ${response.status} ${response.statusText}`);
+        }
+        
+        result = await response.json();
       }
-    } catch (err) {
-      console.error('Error deleting project report:', err);
-      alert(err instanceof Error ? err.message : 'Failed to delete report');
+      
+      if (result?.success) {
+        // Remove from local state
+        setReports(prev => prev.filter(report => report.id !== reportId));
+        setExpandedReports(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(reportId);
+          return newSet;
+        });
+      } else {
+        throw new Error(result?.error || 'Failed to delete report');
+      }
+    } catch (err: any) {
+      console.error('[TestReports] Error deleting report:', err);
+      setError(err.message || 'Failed to delete report');
     } finally {
       setDeleteLoading(null);
     }
   };
 
-  // Toggle expanded state
-  const toggleExpanded = (id: string) => {
-    setExpandedReports(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
-    });
-  };
-
   // Format duration
   const formatDuration = (ms: number) => {
     if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+    return `${(ms / 60000).toFixed(1)}m`;
   };
 
-  // Get status badge variant
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'passed':
-        return 'default' as const;
-      case 'failed':
-        return 'destructive' as const;
-      default:
-        return 'secondary' as const;
+  // Get status badge
+  const getStatusBadge = (report: TestReport) => {
+    if (report.success) {
+      return <Badge variant="default" className="bg-green-100 text-green-800 border-green-200"><CheckCircle className="w-3 h-3 mr-1" />Passed</Badge>;
+    } else {
+      return <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Failed</Badge>;
     }
   };
 
+  // Render AI analysis
+  const renderAIAnalysis = (aiAnalysis: TestReport['aiAnalysis']) => {
+    if (!aiAnalysis) return null;
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <Brain className="w-4 h-4 text-purple-500" />
+          <span className="font-medium">AI Analysis</span>
+          <Badge variant="outline" className="text-xs">
+            {aiAnalysis.confidence}% confidence
+          </Badge>
+        </div>
+        
+        <div className="space-y-3">
+          <div>
+            <div className="flex items-center space-x-2 mb-1">
+              <AlertTriangle className="w-3 h-3 text-orange-500" />
+              <span className="text-sm font-medium">Summary</span>
+            </div>
+            <p className="text-sm text-muted-foreground pl-5">{aiAnalysis.summary}</p>
+          </div>
+          
+          <div>
+            <div className="flex items-center space-x-2 mb-1">
+              <Bug className="w-3 h-3 text-red-500" />
+              <span className="text-sm font-medium">Root Cause</span>
+            </div>
+            <p className="text-sm text-muted-foreground pl-5">{aiAnalysis.rootCause}</p>
+          </div>
+          
+          <div>
+            <div className="flex items-center space-x-2 mb-1">
+              <Lightbulb className="w-3 h-3 text-yellow-500" />
+              <span className="text-sm font-medium">Suggestions</span>
+            </div>
+            <p className="text-sm text-muted-foreground pl-5">{aiAnalysis.suggestions}</p>
+          </div>
+          
+          {aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0 && (
+            <div>
+              <div className="flex items-center space-x-2 mb-1">
+                <Target className="w-3 h-3 text-blue-500" />
+                <span className="text-sm font-medium">Recommendations</span>
+              </div>
+              <ul className="text-sm text-muted-foreground pl-5 space-y-1">
+                {aiAnalysis.recommendations.map((rec, index) => (
+                  <li key={index} className="flex items-start space-x-2">
+                    <span className="text-xs mt-1">•</span>
+                    <span>{rec}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // Render artifacts
+  const renderArtifacts = (artifacts: TestReport['artifacts']) => {
+    if (!artifacts || artifacts.length === 0) return null;
+    
+    const screenshots = artifacts.filter(a => a.contentType.startsWith('image/'));
+    const videos = artifacts.filter(a => a.contentType.startsWith('video/'));
+    const traces = artifacts.filter(a => a.name === 'trace' || a.contentType === 'application/zip');
+    const others = artifacts.filter(a => !screenshots.includes(a) && !videos.includes(a) && !traces.includes(a));
+    
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center space-x-2">
+          <FileText className="w-4 h-4 text-blue-500" />
+          <span className="font-medium">Test Artifacts</span>
+          <Badge variant="outline" className="text-xs">{artifacts.length}</Badge>
+        </div>
+        
+        {screenshots.length > 0 && (
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <Camera className="w-3 h-3 text-green-500" />
+              <span className="text-sm font-medium">Screenshots ({screenshots.length})</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {screenshots.map((artifact, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={getArtifactUrl(artifact)}
+                    alt={artifact.name}
+                    className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition-opacity"
+                    onClick={() => window.open(getArtifactUrl(artifact), '_blank')}
+                  />
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all rounded flex items-center justify-center">
+                    <Eye className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="absolute bottom-1 left-1 right-1">
+                    <div className="bg-black bg-opacity-60 text-white text-xs px-1 py-0.5 rounded truncate">
+                      {artifact.name}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {videos.length > 0 && (
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <Video className="w-3 h-3 text-purple-500" />
+              <span className="text-sm font-medium">Videos ({videos.length})</span>
+            </div>
+            <div className="space-y-2">
+              {videos.map((artifact, index) => (
+                <div key={index} className="flex items-center justify-between p-2 border rounded">
+                  <div className="flex items-center space-x-2">
+                    <Video className="w-4 h-4 text-purple-500" />
+                    <span className="text-sm">{artifact.name}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(getArtifactUrl(artifact), '_blank')}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    View
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {traces.length > 0 && (
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <FileText className="w-3 h-3 text-orange-500" />
+              <span className="text-sm font-medium">Traces ({traces.length})</span>
+            </div>
+            <div className="space-y-2">
+              {traces.map((artifact, index) => (
+                <div key={index} className="flex items-center justify-between p-2 border rounded">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-orange-500" />
+                    <span className="text-sm">{artifact.name}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(getArtifactUrl(artifact), '_blank')}
+                  >
+                    <Download className="w-3 h-3 mr-1" />
+                    Download
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {others.length > 0 && (
+          <div>
+            <div className="flex items-center space-x-2 mb-2">
+              <FileText className="w-3 h-3 text-gray-500" />
+              <span className="text-sm font-medium">Other Files ({others.length})</span>
+            </div>
+            <div className="space-y-2">
+              {others.map((artifact, index) => (
+                <div key={index} className="flex items-center justify-between p-2 border rounded">
+                  <div className="flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-gray-500" />
+                    <span className="text-sm">{artifact.name}</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => window.open(getArtifactUrl(artifact), '_blank')}
+                  >
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    View
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Load reports on mount and when connection changes
   useEffect(() => {
     fetchReports();
-  }, [isConnected, connection]); // Refresh when bridge connection changes
+    console.log('fetching reports');
+  }, [isConnected]);
+
 
   return (
     <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold">Test Reports</h2>
-        <Button onClick={fetchReports} disabled={loading} variant="outline" size="sm">
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+        <div>
+          <h2 className="text-2xl font-bold">Test Reports</h2>
+          <p className="text-muted-foreground">
+            {isConnected ? 'Showing reports from your project' : 'No project connected'}
+          </p>
+        </div>
+        <Button 
+          onClick={fetchReports} 
+          disabled={loading}
+          variant="outline"
+        >
+          <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
-      {/* Loading State */}
-      {loading && (
-        <Card>
-          <CardContent className="flex items-center justify-center py-8">
-            <RefreshCw className="h-6 w-6 animate-spin mr-2" />
-            <span>Loading reports...</span>
+      {/* Connection Status */}
+      {!isConnected && (
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardContent className="pt-4">
+            <div className="flex items-center space-x-2 text-yellow-800">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm">
+                No project connected. Connect to your project to view test reports.
+              </span>
+            </div>
           </CardContent>
         </Card>
       )}
 
       {/* Error State */}
       {error && (
-        <Card>
-          <CardContent className="flex items-center justify-center py-8 text-red-600">
-            <AlertTriangle className="h-5 w-5 mr-2" />
-            <span>Error: {error}</span>
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-4">
+            <div className="flex items-center space-x-2 text-red-800">
+              <AlertTriangle className="w-4 h-4" />
+              <span className="text-sm">{error}</span>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Empty State */}
-      {!loading && !error && reports.length === 0 && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-            <FileText className="h-12 w-12 mb-4" />
-            {isConnected ? (
-              <>
-                <h3 className="text-lg font-medium mb-2">No test reports in this project</h3>
-                <p className="text-sm text-center">
-                  Run some tests in your project to see detailed reports with screenshots, videos, and error analysis.
-                </p>
-              </>
-            ) : (
-              <>
-                <h3 className="text-lg font-medium mb-2">No project connected</h3>
-                <p className="text-sm text-center">
-                  Connect to a project by running <code className="bg-muted px-1 rounded">raiken remote</code> in your project directory to see test reports.
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-8">
+          <RefreshCw className="w-6 h-6 animate-spin mr-2" />
+          <span>Loading reports...</span>
+        </div>
       )}
 
       {/* Reports List */}
+      {!loading && reports.length === 0 && !error && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <FileText className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium mb-2">No reports found</h3>
+              <p className="text-muted-foreground">
+                Run some tests to generate reports that will appear here.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {!loading && reports.length > 0 && (
-        <div className="space-y-6">
-          {reports.map((report) => (
-            <Card key={report.id} className="overflow-hidden">
-              <Collapsible
-                open={expandedReports.has(report.id)}
-                onOpenChange={() => toggleExpanded(report.id)}
-              >
-                {/* Report Header */}
-                <CardHeader className="p-4">
+        <div className="space-y-4">
+          {reports.map((report) => {
+            const isExpanded = expandedReports.has(report.id);
+            
+            return (
+              <Card key={report.id} className={`transition-all ${!report.success ? 'border-red-200' : 'border-green-200'}`}>
+                <Collapsible>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                   <div className="flex items-center justify-between">
-                    <CollapsibleTrigger asChild>
-                      <div className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 hover:bg-muted/30 rounded-lg -m-3 transition-colors">
-                        {expandedReports.has(report.id) ? (
-                          <ChevronDown className="h-5 w-5 text-muted-foreground flex-shrink-0 transition-transform" />
-                        ) : (
-                          <ChevronRight className="h-5 w-5 text-muted-foreground flex-shrink-0 transition-transform" />
+                        <div className="flex items-center space-x-3">
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4" />
+                          )}
+                          <div>
+                            <CardTitle className="text-base">{report.testPath}</CardTitle>
+                            <div className="flex items-center space-x-2 mt-1">
+                              {getStatusBadge(report)}
+                              <span className="text-sm text-muted-foreground flex items-center">
+                                <Clock className="w-3 h-3 mr-1" />
+                                {format(new Date(report.timestamp), 'MMM d, yyyy HH:mm')}
+                            </span>
+                              {report.summary && (
+                                <span className="text-sm text-muted-foreground">
+                                  {formatDuration(report.summary.duration)}
+                            </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          {report.artifacts && report.artifacts.length > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              <FileText className="w-3 h-3 mr-1" />
+                              {report.artifacts.length} files
+                            </Badge>
+                          )}
+                          {report.aiAnalysis && (
+                            <Badge variant="outline" className="text-xs">
+                              <Brain className="w-3 h-3 mr-1" />
+                              AI Analysis
+                            </Badge>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteReport(report.id);
+                            }}
+                            disabled={deleteLoading === report.id}
+                          >
+                            {deleteLoading === report.id ? (
+                              <RefreshCw className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  
+                  <CollapsibleContent>
+                    <CardContent className="pt-0">
+                      <div className="space-y-6">
+                        
+                        {/* AI Analysis */}
+                        {report.aiAnalysis && (
+                          <>
+                            <Separator />
+                            {renderAIAnalysis(report.aiAnalysis)}
+                          </>
                         )}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-3 mb-2 min-w-0">
-                            <CardTitle className="text-xl font-semibold flex-1 min-w-0 truncate text-foreground">
-                              {report.testName}
-                            </CardTitle>
-                            <Badge
-                              variant={getStatusBadgeVariant(report.status)}
-                              className="text-xs font-medium px-2 py-1 flex-shrink-0"
-                            >
-                              {report.success ? 'Passed' : 'Failed'}
-                            </Badge>
-                          </div>
-                          <div className="flex flex-wrap gap-4 items-center text-sm text-muted-foreground">
-                            <span className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span className="font-medium">{formatDuration(report.duration)}</span>
-                            </span>
-                            <span className="flex items-center gap-2">
-                              <span>📅</span>
-                              <span>{format(new Date(report.timestamp), 'MMM d, yyyy HH:mm:ss')}</span>
-                            </span>
-                            <span className="flex items-center gap-2 truncate max-w-xs" title={report.testPath}>
-                              <span>📁</span>
-                              <span>{report.testPath}</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </CollapsibleTrigger>
-                    <Button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteReport(report.id);
-                      }}
-                      disabled={deleteLoading === report.id}
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors p-2 rounded-md"
-                    >
-                      {deleteLoading === report.id ? (
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </CardHeader>
-
-                {/* Report Details */}
-                <CollapsibleContent>
-                  <CardContent className="space-y-8 pt-0 pb-6 px-4">
-
-                    {/* AI Analysis */}
-                    {report.summary && (
-                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 shadow-sm">
-                        <div className="flex items-center justify-between mb-4">
-                          <h4 className="font-semibold text-blue-900 flex items-center gap-3 text-lg">
-                            <Brain className="h-5 w-5" />
-                            AI Analysis
-                          </h4>
-                          {report.aiConfidence && (
-                            <Badge variant="outline" className="text-xs font-medium px-3 py-1 bg-blue-100 text-blue-800 border-blue-300">
-                              {report.aiConfidence}% confidence
-                            </Badge>
-                          )}
-                        </div>
-
-                        <div className="space-y-4">
-                          <div className="bg-white/60 rounded-lg p-4 border border-blue-100">
-                            <p className="text-sm text-blue-900 leading-relaxed">{report.summary}</p>
-                          </div>
-
-                          {report.rootCause && (
-                            <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg p-4">
-                              <p className="text-sm font-semibold text-orange-900 mb-2 flex items-center gap-2">
-                                <Target className="h-4 w-4" />
-                                Root Cause
-                              </p>
-                              <p className="text-sm text-orange-800 leading-relaxed">{report.rootCause}</p>
-                            </div>
-                          )}
-
-                          {report.suggestions && (
-                            <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4">
-                              <p className="text-sm font-semibold text-green-900 mb-2 flex items-center gap-2">
-                                <Lightbulb className="h-4 w-4" />
-                                Suggestions
-                              </p>
-                              <p className="text-sm text-green-800 leading-relaxed">{report.suggestions}</p>
-                            </div>
-                          )}
-
-                          {report.fixRecommendations && Array.isArray(report.fixRecommendations) && (
-                            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4">
-                              <p className="text-sm font-semibold text-purple-900 mb-3 flex items-center gap-2">
-                                <span>🔧</span>
-                                Fix Recommendations
-                              </p>
-                              <ul className="text-sm text-purple-800 space-y-2">
-                                {report.fixRecommendations.map((rec: string, index: number) => (
-                                  <li key={index} className="flex items-start gap-3 p-2 bg-white/50 rounded border border-purple-100">
-                                    <span className="text-purple-600 font-bold text-xs bg-purple-100 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
-                                      {index + 1}
-                                    </span>
-                                    <span className="leading-relaxed">{rec}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Screenshots */}
-                    {report.screenshots && report.screenshots.length > 0 && (
-                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 shadow-sm">
-                        <h4 className="font-semibold text-purple-900 mb-4 flex items-center gap-3 text-lg">
-                          <Camera className="h-5 w-5" />
-                          Screenshots ({report.screenshots.length})
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {report.screenshots.map((screenshot: any, index: number) => (
-                            <div key={index} className="bg-white border border-purple-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
-                              <div className="aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden border border-gray-200">
-                                <img
-                                  src={getArtifactUrl(screenshot)}
-                                  alt={screenshot.name}
-                                  className="w-full h-full object-contain hover:scale-105 transition-transform cursor-pointer"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLImageElement;
-                                    target.style.display = 'none';
-                                    const parent = target.parentElement;
-                                    if (parent) {
-                                      parent.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400"><div class="text-center"><svg class="h-12 w-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg><p class="text-sm">Image not available</p></div></div>';
-                                    }
-                                  }}
-                                  onClick={() => window.open(getArtifactUrl(screenshot), '_blank')}
-                                />
+                        
+                        {/* Artifacts */}
+                        {report.artifacts && report.artifacts.length > 0 && (
+                          <>
+                            <Separator />
+                            {renderArtifacts(report.artifacts)}
+                          </>
+                        )}
+                        
+                        {/* Error Details */}
+                        {!report.success && report.error && (
+                          <>
+                            <Separator />
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                <Bug className="w-4 h-4 text-red-500" />
+                                <span className="font-medium">Error Details</span>
                               </div>
-                              <div className="space-y-1">
-                                <p className="text-sm font-medium text-purple-800 truncate" title={screenshot.name}>
-                                  {screenshot.name}
-                                </p>
-                                <p className="text-xs text-purple-600 flex items-center gap-1">
-                                  <span>🔍</span>
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Videos */}
-                    {report.videos && report.videos.length > 0 && (
-                      <div className="shadow-sm">
-                        <h4 className="font-semibold text-indigo-900 mb-4 flex items-center gap-3 text-lg">
-                          <Video className="h-5 w-5" />
-                          Videos ({report.videos.length})
-                        </h4>
-                        <div className="space-y-4">
-                          {report.videos.map((video: any, index: number) => (
-                            <div key={index} className="bg-white border border-indigo-200 rounded-lg p-4 shadow-sm">
-                              <div className="aspect-video bg-gray-100 rounded-lg mb-3 overflow-hidden border border-gray-200">
-                                <video
-                                  src={getArtifactUrl(video)}
-                                  controls
-                                  className="w-full h-full rounded-lg"
-                                  preload="metadata"
-                                  onError={(e) => {
-                                    const target = e.target as HTMLVideoElement;
-                                    target.style.display = 'none';
-                                    const parent = target.parentElement;
-                                    if (parent) {
-                                      parent.innerHTML = '<div class="flex items-center justify-center h-full text-gray-400"><div class="text-center"><svg class="h-12 w-12 mx-auto mb-2" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg><p class="text-sm">Video not available</p></div></div>';
-                                    }
-                                  }}
-                                >
-                                  Your browser does not support the video tag.
-                                </video>
-                              </div>
-                              <div className="space-y-1">
-                                <p className="text-sm font-medium text-indigo-800 truncate" title={video.name}>
-                                  {video.name}
-                                </p>
-                                <p className="text-xs text-indigo-600 flex items-center gap-1">
-                                  <span>🎬</span>
-                                  Test execution recording
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {/* Browser Logs */}
-                    {report.browserLogs && report.browserLogs.length > 0 && (
-                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                        <h4 className="font-medium text-orange-900 mb-3 flex items-center gap-2">
-                          <Bug className="h-4 w-4" />
-                          Browser Logs ({report.browserLogs.length})
-                        </h4>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {report.browserLogs.map((log: any, index: number) => (
-                            <div key={index} className={`text-xs p-2 rounded ${log.level === 'error' ? 'bg-red-100 text-red-800' :
-                                log.level === 'warning' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-gray-100 text-gray-700'
-                              }`}>
-                              <span className="font-medium">[{log.level.toUpperCase()}]</span> {log.message}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Raw Output (Collapsible) */}
-                    {(report.rawOutput || report.rawError) && (
-                      <details className="bg-gray-50 border border-gray-200 rounded-lg">
-                        <summary className="cursor-pointer p-4 font-medium text-gray-700 hover:bg-gray-100">
-                          Raw Playwright Output
-                        </summary>
-                        <div className="border-t p-4 space-y-3">
-                          {report.rawOutput && (
-                            <div>
-                              <h5 className="text-xs font-medium text-gray-700 mb-2">STDOUT:</h5>
-                              <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-48">
-                                {report.rawOutput}
+                              <pre className="text-sm bg-red-50 border border-red-200 rounded p-3 overflow-x-auto text-red-800">
+                                {report.error}
                               </pre>
                             </div>
-                          )}
-                          {report.rawError && (
-                            <div>
-                              <h5 className="text-xs font-medium text-gray-700 mb-2">STDERR:</h5>
-                              <pre className="text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-48">
-                                {report.rawError}
+                          </>
+                        )}
+                        
+                        {/* Raw Output (Collapsible) */}
+                        {report.output && (
+                          <>
+                            <Separator />
+                            <Collapsible>
+                              <CollapsibleTrigger asChild>
+                                <Button variant="ghost" size="sm" className="w-full justify-start">
+                                  <ChevronRight className="w-3 h-3 mr-1" />
+                                  View Raw Output
+                                </Button>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <pre className="text-xs bg-muted border rounded p-3 overflow-x-auto mt-2 max-h-64">
+                                  {report.output}
                               </pre>
-                            </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          </>
                           )}
                         </div>
-                      </details>
-                    )}
-
                   </CardContent>
                 </CollapsibleContent>
               </Collapsible>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

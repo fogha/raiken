@@ -18,7 +18,7 @@ import {
   Info
 } from 'lucide-react';
 import { unifiedBridge } from '@/lib/unified-bridge';
-import { localBridgeServiceService } from '@/lib/local-bridge';
+import { localBridgeService } from '@/lib/local-bridge';
 
 interface DiagnosticResult {
   name: string;
