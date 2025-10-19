@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { useBrowserStore } from '@/store/browserStore';
-import { useTestStore } from '@/store/testStore';
+import { useEditorStore } from '@/store/editorStore';
 import { useLocalBridge } from '@/hooks/useLocalBridge';
+import { useExecuteTest } from '@/hooks/useExecuteTest';
+import { useTestFiles } from '@/hooks/useTestFiles';
 import { TestScriptConfig, TestTab as TypesTestTab } from '@/types/test';
 import { TestScriptEditor } from './TestScriptEditor';
 import { Play, Save, Loader2, Plus, FileText, X } from 'lucide-react';
@@ -29,10 +30,11 @@ export function TabbedTestEditor() {
     updateEditorTab,
     removeEditorTab,
     setActiveTab,
-  } = useBrowserStore();
+  } = useEditorStore();
 
-  const { runTest, isTestRunning, loadTestFiles } = useTestStore();
   const { isConnected, saveTest } = useLocalBridge();
+  const { executeTest, isExecuting } = useExecuteTest();
+  const { refetch: refetchTestFiles } = useTestFiles();
   const [savingTabs, setSavingTabs] = useState<Set<string>>(new Set());
 
   // Get the active tab data - safely handle null case
@@ -67,7 +69,7 @@ export function TabbedTestEditor() {
         if (result.success) {
           console.log('✅ Test saved successfully to:', result.path);
           // Refresh test files to show the new file
-          await loadTestFiles();
+          refetchTestFiles();
           return;
         } else {
           console.warn('⚠️ Local bridge save failed, falling back to Raiken API:', result.error);
@@ -125,18 +127,14 @@ export function TabbedTestEditor() {
   const handleRunTest = async (tab: TestTab) => {
     // First save the test, then run it
     await handleSaveTest(tab);
-    
     const testPath = getTestPath(tab);
-    
-    console.log(`[Raiken] Running specific test: ${tab.name} (ID: ${tab.id})`);
-    console.log(`[Raiken] Test file path: ${testPath} (bridge: ${isConnected ? 'connected' : 'disconnected'})`);
-    await runTest(testPath);
+    executeTest({ testPath });
   };
 
   // Show empty state when no tabs
   if (editorTabs.length === 0) {
     return (
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col w-full h-full">
         {/* Header with Save/Run buttons (disabled) */}
         <div className="flex items-center justify-between gap-2 p-2 bg-muted/30">
           <div className="flex items-center gap-1">
@@ -189,9 +187,9 @@ export function TabbedTestEditor() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col w-full h-full">
       {/* Permanent Save and Run buttons at the top */}
-      <div className="flex items-center justify-between gap-2 p-2 bg-muted/30">
+      <div className="flex items-center justify-between gap-2 py-2 bg-muted/30">
         <div className="flex items-center gap-1">
           <div className="flex items-center bg-muted rounded-md p-1">
             {editorTabs.map(tab => (
@@ -246,10 +244,10 @@ export function TabbedTestEditor() {
         </Button>
         <Button
           onClick={() => activeTab && handleRunTest(activeTab)}
-          disabled={!activeTab || (activeTab && (savingTabs.has(activeTab.id) || isTestRunning(getTestPath(activeTab))))}
+          disabled={!activeTab || (activeTab && (savingTabs.has(activeTab.id) || isExecuting))}
           size="sm"
         >
-          {activeTab && isTestRunning(getTestPath(activeTab)) ? (
+          {activeTab && isExecuting ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             <Play className="h-4 w-4 mr-2" />
@@ -260,11 +258,14 @@ export function TabbedTestEditor() {
       </div>
 
       {/* Tab content area */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden">
         {editorTabs.map(tab => (
           <div 
             key={tab.id} 
-            className={`h-full ${activeTabId === tab.id ? 'block' : 'hidden'}`}
+            style={{
+              height: "77vh"
+            }}
+            className={`min-h-[640px] flex-1 ${activeTabId === tab.id ? 'flex' : 'hidden'}`}
           >
             <TestScriptEditor
               value={tab.content}

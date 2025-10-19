@@ -1,12 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { OpenRouterService } from '@/core/testing/services/openrouter.service';
 import * as testFileManager from '@/core/testing/services/testFileManager';
 import { TestSuiteManager } from '@/core/testing/services/testSuite';
 import { localBridgeService } from '@/lib/local-bridge';
 
 /**
- * Unified Tests API Handler
- * Handles all test-related operations through a single endpoint
+ * Tests API Handler
+ * Handles test execution, file management, and reporting
+ * 
+ * Actions:
+ * - execute: Run a test file
+ * - save: Save a test file
+ * - list: List all test files
+ * - delete: Delete a test file
+ * - get-reports: Get test reports
+ * - delete-report: Delete a test report
+ * 
+ * Note: Test generation is handled by /api/generate-test
  */
 
 const testSuiteManager = new TestSuiteManager({
@@ -20,8 +29,6 @@ export async function POST(request: NextRequest) {
     const { action, ...params } = body;
 
     switch (action) {
-      case 'generate':
-        return handleGenerateTest(params);
       case 'execute':
         return handleExecuteTest(params);
       case 'save':
@@ -100,46 +107,6 @@ export async function DELETE(request: NextRequest) {
     console.error('Tests API DELETE error:', error);
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
-
-async function handleGenerateTest(params: any) {
-  const { prompt, domTree, url, config } = params;
-
-  if (!prompt) {
-    return NextResponse.json(
-      { success: false, error: 'Test generation prompt is required' },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const openRouterService = new OpenRouterService({
-      apiKey: process.env.OPENROUTER_API_KEY || '',
-      model: config?.model || 'anthropic/claude-3.5-sonnet'
-    });
-
-    const testScript = await openRouterService.generateTestScript(
-      prompt,
-    );
-
-    if (!testScript) {
-      return NextResponse.json(
-        { success: false, error: 'Failed to generate test script' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      testScript,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
       { status: 500 }
     );
   }

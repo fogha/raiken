@@ -70,7 +70,7 @@ export class TestReportsService {
   private reportsDir: string;
 
   constructor(customReportsDir?: string) {
-    this.reportsDir = customReportsDir || path.resolve(process.cwd(), 'test-results', 'reports');
+    this.reportsDir = customReportsDir || path.resolve(process.cwd(), 'test-reports');
   }
 
   /**

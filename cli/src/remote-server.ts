@@ -247,7 +247,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
           reportId: 'timeout'
         });
       }
-    }, 150000); // 2.5 minute timeout
+    }, 180000);
     
     try {
       const { testPath, config } = req.body;

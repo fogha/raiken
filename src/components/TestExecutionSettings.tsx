@@ -9,11 +9,11 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { useTestStore } from '@/store/testStore';
+import { useTestGeneration } from '@/hooks/useTestGeneration';
 import { Settings, RotateCcw, Monitor, Clock, Zap, Camera, Video, Bug } from 'lucide-react';
 
 export function TestExecutionSettings() {
-  const { executionConfig, updateExecutionConfig, resetExecutionConfig } = useTestStore();
+  const { executionConfig, updateExecutionConfig, resetExecutionConfig } = useTestGeneration();
 
   const handleBrowserTypeChange = (value: 'chromium' | 'firefox' | 'webkit') => {
     updateExecutionConfig({ browserType: value });

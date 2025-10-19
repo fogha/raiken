@@ -46,35 +46,47 @@ async function createTestDirectory(projectPath: string, projectInfo: ProjectInfo
 
 async function createTestResultsDirectory(projectPath: string): Promise<void> {
   const testResultsPath = path.join(projectPath, 'test-results');
-  const reportsPath = path.join(testResultsPath, 'reports');
+  const testReportsPath = path.join(projectPath, 'test-reports');
   
   try {
-    // Create test-results directory
+    // Create test-results directory (for Playwright artifacts)
     await fs.mkdir(testResultsPath, { recursive: true });
     
-    // Create reports subdirectory
-    await fs.mkdir(reportsPath, { recursive: true });
+    // Create test-reports directory (for Raiken reports - separate from Playwright)
+    await fs.mkdir(testReportsPath, { recursive: true });
     
-    // Create .gitignore to exclude test artifacts from version control
-    const gitignorePath = path.join(testResultsPath, '.gitignore');
-    const gitignoreContent = `# Test artifacts
+    // Create .gitignore in test-results to exclude Playwright artifacts
+    const testResultsGitignorePath = path.join(testResultsPath, '.gitignore');
+    const testResultsGitignoreContent = `# Playwright test artifacts
 *
 !.gitignore
-!reports/
-reports/*.json
 `;
     
     try {
-      await fs.access(gitignorePath);
+      await fs.access(testResultsGitignorePath);
       console.log(chalk.yellow('⚠ test-results/.gitignore already exists'));
     } catch {
-      await fs.writeFile(gitignorePath, gitignoreContent);
+      await fs.writeFile(testResultsGitignorePath, testResultsGitignoreContent);
       console.log(chalk.green('✓ Created test-results/.gitignore'));
     }
     
-    console.log(chalk.green('✓ Created test-results/ directory structure'));
+    // Create .gitignore in test-reports to exclude report JSON files
+    const testReportsGitignorePath = path.join(testReportsPath, '.gitignore');
+    const testReportsGitignoreContent = `# Test report JSON files
+*.json
+`;
+    
+    try {
+      await fs.access(testReportsGitignorePath);
+      console.log(chalk.yellow('⚠ test-reports/.gitignore already exists'));
+    } catch {
+      await fs.writeFile(testReportsGitignorePath, testReportsGitignoreContent);
+      console.log(chalk.green('✓ Created test-reports/.gitignore'));
+    }
+    
+    console.log(chalk.green('✓ Created test-results/ and test-reports/ directories'));
   } catch (error) {
-    console.log(chalk.yellow('⚠ Could not create test-results directory structure'));
+    console.log(chalk.yellow('⚠ Could not create directory structure'));
   }
 }
 
@@ -130,6 +142,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  preserveOutput: 'always',
   use: {
     baseURL: 'http://localhost:${getDefaultPort(projectInfo.type)}',
     trace: 'on-first-retry',

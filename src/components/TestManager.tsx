@@ -1,32 +1,48 @@
 "use client"
 
-import { useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useTestStore, type TestFile } from '@/store/testStore';
-import { useBrowserStore } from '@/store/browserStore';
+import { useEditorStore } from '@/store/editorStore';
 import { useLocalBridge } from '@/hooks/useLocalBridge';
-import { Loader2, Play, RefreshCw, Edit, Trash2, CheckCircle, XCircle, Wifi, WifiOff } from 'lucide-react';
+import { useTestFiles } from '@/hooks/useTestFiles';
+import { useExecuteTest } from '@/hooks/useExecuteTest';
+import { Loader2, Play, RefreshCw, Edit, Trash2, CheckCircle, WifiOff } from 'lucide-react';
+
+interface TestFile {
+  name: string;
+  path: string;
+  content: string;
+  createdAt: string;
+  modifiedAt: string;
+}
 
 export function TestManager() {
-  const testStore = useTestStore();
-  const { addEditorTab } = useBrowserStore();
-  const { isConnected, connection } = useLocalBridge();
-
-  useEffect(() => {
-    testStore.loadTestFiles();
-  }, [isConnected]);
+  const { addEditorTab } = useEditorStore();
+  const { isConnected } = useLocalBridge();
+  const { testFiles, isLoading, refetch, deleteTest } = useTestFiles();
+  const { executeTest, isExecuting } = useExecuteTest();
+  const [executingTests, setExecutingTests] = useState<Set<string>>(new Set());
 
   const handleRunTest = useCallback(async (testPath: string) => {
-    await testStore.runTest(testPath);
-  }, [testStore]);
+    setExecutingTests(prev => new Set(prev).add(testPath));
+    executeTest({ testPath }, {
+      onSettled: () => {
+        setExecutingTests(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(testPath);
+          return newSet;
+        });
+      }
+    });
+  }, [executeTest]);
 
   const handleDeleteTest = useCallback(async (testPath: string) => {
     if (confirm(`Are you sure you want to delete ${testPath}?`)) {
-      await testStore.deleteTestFile(testPath);
+      deleteTest(testPath);
     }
-  }, [testStore]);
+  }, [deleteTest]);
 
   const handleOpenTest = useCallback((file: TestFile) => {
     const newTab = {
@@ -41,26 +57,6 @@ export function TestManager() {
     };
     addEditorTab(newTab);
   }, [addEditorTab]);
-
-  const ConnectionStatus = () => (
-    <div className="flex items-center gap-2 text-sm">
-      {isConnected ? (
-        <>
-          <Wifi className="h-4 w-4 text-green-500" />
-          <span className="text-green-700 dark:text-green-300">
-            Connected to {connection?.projectInfo?.project?.name || 'Project'}
-          </span>
-        </>
-      ) : (
-        <>
-          <WifiOff className="h-4 w-4 text-red-500" />
-          <span className="text-red-700 dark:text-red-300">
-            No project connected
-          </span>
-        </>
-      )}
-    </div>
-  );
 
   const TestFileItem = ({ file }: { file: TestFile }) => (
     <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
@@ -81,7 +77,7 @@ export function TestManager() {
           variant="outline"
           size="sm"
           onClick={() => handleOpenTest(file)}
-          disabled={testStore.isTestRunning(file.path)}
+          disabled={executingTests.has(file.path)}
         >
           <Edit className="h-4 w-4" />
         </Button>
@@ -90,9 +86,9 @@ export function TestManager() {
           variant="outline"
           size="sm"
           onClick={() => handleRunTest(file.path)}
-          disabled={testStore.isTestRunning(file.path) || !isConnected}
+          disabled={executingTests.has(file.path) || !isConnected}
         >
-          {testStore.isTestRunning(file.path) ? (
+          {executingTests.has(file.path) ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Play className="h-4 w-4" />
@@ -103,7 +99,7 @@ export function TestManager() {
           variant="outline"
           size="sm"
           onClick={() => handleDeleteTest(file.path)}
-          disabled={testStore.isTestRunning(file.path) || !isConnected}
+          disabled={executingTests.has(file.path) || !isConnected}
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -117,14 +113,13 @@ export function TestManager() {
         <div className="flex items-center justify-between">
           <CardTitle>Test Files</CardTitle>
           <div className="flex items-center gap-2">
-            <ConnectionStatus />
             <Button
               variant="outline"
               size="sm"
-              onClick={() => testStore.loadTestFiles()}
-              disabled={testStore.isLoadingFiles}
+              onClick={() => refetch()}
+              disabled={isLoading}
             >
-              {testStore.isLoadingFiles ? (
+              {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="h-4 w-4" />
@@ -143,12 +138,12 @@ export function TestManager() {
               Run <code className="bg-muted px-2 py-1 rounded">raiken remote</code> in your project directory to connect
             </p>
           </div>
-        ) : testStore.isLoadingFiles ? (
+        ) : isLoading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin mr-2" />
             <span>Loading test files...</span>
           </div>
-        ) : testStore.testFiles.length === 0 ? (
+        ) : testFiles.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
             <p className="text-lg font-medium mb-2">No Test Files</p>
@@ -156,7 +151,7 @@ export function TestManager() {
           </div>
         ) : (
           <div className="space-y-3">
-            {testStore.testFiles.map((file) => (
+            {testFiles.map((file) => (
               <TestFileItem key={file.path} file={file} />
             ))}
           </div>

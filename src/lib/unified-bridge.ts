@@ -7,6 +7,7 @@ export interface BridgeStatus {
   mode: BridgeMode;
   connected: boolean;
   url?: string;
+  token?: string;
   projectName?: string;
   sessionId?: string;
   lastHealthCheck?: number;
@@ -144,6 +145,7 @@ class UnifiedBridgeService {
         ...baseStatus,
         connected: localBridgeService.isConnected(),
         url: connection?.url,
+        token: connection?.token,
         projectName: connection?.projectInfo?.project?.name,
         lastHealthCheck: connection?.lastHealthCheck,
         projectInfo: connection?.projectInfo?.project

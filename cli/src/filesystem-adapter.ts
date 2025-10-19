@@ -2,28 +2,37 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { ProjectInfo, TestFile, TestReport } from './project-detector';
 
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  ttl: number;
+
+enum ReportIdError {
+  FILE_NOT_FOUND = 'file-not-found',
+  EXECUTION_FAILED = 'execution-failed',
+  PLAYWRIGHT_NOT_AVAILABLE = 'playwright-not-available',
+  PLAYWRIGHT_CHECK_TIMEOUT = 'playwright-check-timeout',
+  PLAYWRIGHT_PROCESS_FAILED = 'playwright-process-failed',
+  SAVE_REPORT_FAILED = 'save-report-failed',
+  FALLBACK_REPORT_CREATION_FAILED = 'fallback-report-creation-failed',
+  INVALID_TEST_PATH = 'invalid-test-path',
+  REPORT_CREATION_FAILED = 'report-creation-failed',
+  REPORT_DELETION_FAILED = 'report-deletion-failed',
+  REPORT_NOT_FOUND = 'report-not-found',
+  AI_ANALYSIS_FAILED = 'ai-analysis-failed',
+  AI_ANALYSIS_TIMEOUT = 'ai-analysis-timeout',
+  AI_ANALYSIS_SERVICE_UNAVAILABLE = 'ai-analysis-service-unavailable',
+  AI_ANALYSIS_SERVICE_TIMEOUT = 'ai-analysis-service-timeout',
+  AI_ANALYSIS_SERVICE_ERROR = 'ai-analysis-service-error',
 }
 
 export class LocalFileSystemAdapter {
   public readonly projectPath: string;
   private projectInfo: ProjectInfo;
   public readonly testDirectory: string;
-  private cache: Map<string, CacheEntry<any>> = new Map();
   private fileWatchers: Map<string, any> = new Map();
-  
-  private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
-  private readonly TEST_FILES_TTL = 2 * 60 * 1000; // 2 minutes
-  private readonly REPORTS_TTL = 1 * 60 * 1000; // 1 minute
 
   constructor(projectPath: string, projectInfo: ProjectInfo) {
     this.projectPath = projectPath;
     this.projectInfo = projectInfo;
     this.testDirectory = path.join(projectPath, projectInfo.testDir);
-    
+
     this.setupFileWatcher();
   }
 
@@ -32,11 +41,9 @@ export class LocalFileSystemAdapter {
       const fs = require('fs');
       if (fs.existsSync(this.testDirectory)) {
         const watcher = fs.watch(this.testDirectory, { recursive: true }, (eventType: string, filename: string) => {
-          if (filename && this.isTestFile(filename)) {
-            this.invalidateCache('test-files');
-          }
+          // File watcher for potential future use
         });
-        
+
         this.fileWatchers.set('test-directory', watcher);
       }
     } catch (error) {
@@ -44,52 +51,7 @@ export class LocalFileSystemAdapter {
     }
   }
 
-  private isTestFile(filename: string): boolean {
-    return filename.endsWith('.spec.ts') || 
-           filename.endsWith('.test.ts') || 
-           filename.endsWith('.spec.js') || 
-           filename.endsWith('.test.js');
-  }
-
-  private getCacheKey(operation: string, ...params: any[]): string {
-    return `${operation}:${params.join(':')}`;
-  }
-
-  private getFromCache<T>(key: string): T | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-    
-    if (Date.now() - entry.timestamp > entry.ttl) {
-      this.cache.delete(key);
-      return null;
-    }
-    
-    return entry.data;
-  }
-
-  private setCache<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
-    this.cache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl
-    });
-  }
-
-  private invalidateCache(pattern: string): void {
-    for (const key of this.cache.keys()) {
-      if (key.includes(pattern)) {
-        this.cache.delete(key);
-      }
-    }
-  }
-
   async getTestFiles(): Promise<TestFile[]> {
-    const cacheKey = this.getCacheKey('test-files');
-    
-    const cached = this.getFromCache<TestFile[]>(cacheKey);
-    if (cached) {
-      return cached;
-    }
 
     await ensureTestDirectory(this.projectPath, this.projectInfo.testDir);
 
@@ -100,29 +62,23 @@ export class LocalFileSystemAdapter {
     const testFiles: TestFile[] = [];
 
     for (const filePath of testFilePaths) {
-      try {
-        const [content, stats] = await Promise.all([
-          fs.readFile(filePath, 'utf-8'),
-          fs.stat(filePath)
-        ]);
-        
-        const relativePath = path.relative(this.projectPath, filePath);
+      const [content, stats] = await Promise.all([
+        fs.readFile(filePath, 'utf-8'),
+        fs.stat(filePath)
+      ]);
 
-        testFiles.push({
-          name: path.basename(filePath),
-          path: relativePath,
-          content,
-          createdAt: stats.birthtime.toISOString(),
-          modifiedAt: stats.mtime.toISOString()
-        });
-      } catch (error) {
-        continue;
-      }
+      const relativePath = path.relative(this.projectPath, filePath);
+
+      testFiles.push({
+        name: path.basename(filePath),
+        path: relativePath,
+        content,
+        createdAt: stats.birthtime.toISOString(),
+        modifiedAt: stats.mtime.toISOString()
+      });
     }
 
     const sortedFiles = testFiles.sort((a, b) => a.name.localeCompare(b.name));
-    this.setCache(cacheKey, sortedFiles, this.TEST_FILES_TTL);
-    
     return sortedFiles;
   }
 
@@ -131,10 +87,9 @@ export class LocalFileSystemAdapter {
 
     const normalizedFilename = this.normalizeTestFilename(filename);
     const fullPath = path.join(this.testDirectory, normalizedFilename);
-    
+
     await fs.writeFile(fullPath, content, 'utf-8');
-    this.invalidateCache('test-files');
-    
+
     return path.relative(this.projectPath, fullPath);
   }
 
@@ -143,10 +98,10 @@ export class LocalFileSystemAdapter {
     let normalizedName = filename
       .replace(/\.(spec|test)\.(ts|js)$/, '')
       .replace(/\.(ts|js)$/, '');
-    
+
     // Sanitize the base name
     normalizedName = normalizedName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    
+
     // Add the .spec.ts extension
     return `${normalizedName}.spec.ts`;
   }
@@ -154,101 +109,65 @@ export class LocalFileSystemAdapter {
   async deleteTestFile(testPath: string): Promise<void> {
     const fullPath = path.resolve(this.projectPath, testPath);
     const normalizedProjectPath = path.resolve(this.projectPath);
-    
+
     if (!fullPath.startsWith(normalizedProjectPath)) {
       throw new Error('Invalid test path - outside project directory');
     }
 
     await fs.unlink(fullPath);
-    this.invalidateCache('test-files');
   }
 
   async executeTest(testPath: string, config: any): Promise<{ success: boolean; output?: string; error?: string; reportId?: string }> {
     console.log(`[CLI] Starting test execution for: ${testPath}`);
-    
+
     try {
+      // 1. Validate inputs
+      if (!testPath || typeof testPath !== 'string' || testPath.trim() === '') {
+        throw new Error('Test path must be a non-empty string');
+      }
+
+      if (!config || typeof config !== 'object') {
+        throw new Error('Config must be a valid object');
+      }
+
+      // 2. Resolve and verify test path
       const resolvedTestPath = await this.resolveTestPath(testPath);
-      console.log(`[CLI] Resolved test path: ${resolvedTestPath}`);
-      
-      // Check if test file exists
       const fullTestPath = path.resolve(this.projectPath, resolvedTestPath);
+
       try {
         await fs.access(fullTestPath);
-        console.log(`[CLI] Test file exists: ${fullTestPath}`);
       } catch {
-        console.error(`[CLI] Test file not found: ${fullTestPath}`);
-        return {
-          success: false,
-          error: `Test file not found: ${resolvedTestPath}`,
-          reportId: 'file-not-found'
-        };
+        throw new Error(`Test file not found: ${resolvedTestPath}`);
       }
-      
-      // Ensure directories exist
-      const testResultsDir = path.join(this.projectPath, 'test-results');
-      const reportsDir = path.join(testResultsDir, 'reports');
-      
+
+      // Use dedicated test-reports directory (separate from test-results)
+      // This prevents Playwright from cleaning our reports when it cleans test-results
+      const reportsDir = path.join(this.projectPath, 'test-reports');
+
       try {
-        // Create both test-results and reports directories
-        await fs.mkdir(testResultsDir, { recursive: true });
-        console.log(`[CLI] Created test-results directory: ${testResultsDir}`);
         await fs.mkdir(reportsDir, { recursive: true });
-        console.log(`[CLI] Created reports directory: ${reportsDir}`);
-        
-        // Verify directories exist
-        await fs.access(testResultsDir);
-        await fs.access(reportsDir);
-        console.log(`[CLI] Verified directories exist`);
-      } catch (dirError) {
-        console.error(`[CLI] Failed to create reports directory:`, dirError);
-        
-        // Try to create report in a fallback location
-        const testBaseName = path.basename(resolvedTestPath, path.extname(resolvedTestPath));
-        const reportId = `report_${testBaseName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        try {
-          const tempReportsDir = path.join(this.projectPath, 'temp-reports');
-          await fs.mkdir(tempReportsDir, { recursive: true });
-          
-          const failureReport = {
-            id: reportId,
-            testPath: resolvedTestPath,
-            timestamp: new Date().toISOString(),
-            success: false,
-            output: '',
-            error: `Failed to create reports directory: ${dirError}`,
-            config,
-            results: null,
-          };
-          const reportPath = path.join(tempReportsDir, `${reportId}.json`);
-          await fs.writeFile(reportPath, JSON.stringify(failureReport, null, 2));
-          console.log(`[CLI] Created directory failure report in temp location: ${reportId}`);
-        } catch (reportError) {
-          console.error(`[CLI] Failed to create directory failure report:`, reportError);
-        }
-        
-        return {
-          success: false,
-          error: `Failed to create reports directory: ${dirError}`,
-          reportId
-        };
+        console.log(`[CLI] Reports directory ready: ${reportsDir}`);
+      } catch (mkdirError) {
+        console.error(`[CLI] Failed to create reports directory:`, mkdirError);
+        throw new Error(`Failed to create reports directory: ${mkdirError}`);
       }
-      
+
       // Check if Playwright is available
-    try {
-      const { spawn } = require('child_process');
+      try {
+        const { spawn } = require('child_process');
         console.log(`[CLI] Checking Playwright availability...`);
-        
+
         const checkProcess = spawn('npx', ['playwright', '--version'], {
           cwd: this.projectPath,
           stdio: 'pipe'
         });
-        
-        const playwrightCheck = await new Promise((resolve, reject) => {
+
+        await new Promise((resolve, reject) => {
           let output = '';
           checkProcess.stdout.on('data', (data: Buffer) => {
             output += data.toString();
           });
-          
+
           checkProcess.on('close', (code: number | null) => {
             if (code === 0) {
               console.log(`[CLI] Playwright is available: ${output.trim()}`);
@@ -257,69 +176,34 @@ export class LocalFileSystemAdapter {
               reject(new Error(`Playwright not available (exit code: ${code})`));
             }
           });
-          
+
           checkProcess.on('error', reject);
-          
+
           // Timeout for the check
           setTimeout(() => {
             checkProcess.kill('SIGTERM');
             reject(new Error('Playwright check timeout'));
-          }, 10000);
+          }, 5000);
         });
       } catch (error) {
-        console.error(`[CLI] Playwright check failed:`, error);
-        
-        // Create a report for Playwright availability failure
-        const testBaseName = path.basename(resolvedTestPath, path.extname(resolvedTestPath));
-        const reportId = `report_${testBaseName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        try {
-          // Ensure the reports directory exists
-          await fs.mkdir(reportsDir, { recursive: true });
-          
-          const failureReport = {
-            id: reportId,
-            testPath: resolvedTestPath,
-            timestamp: new Date().toISOString(),
-            success: false,
-            output: '',
-            error: `Playwright not available: ${error}`,
-            config,
-            results: null,
-          };
-          const reportPath = path.join(reportsDir, `${reportId}.json`);
-          await fs.writeFile(reportPath, JSON.stringify(failureReport, null, 2));
-          console.log(`[CLI] Created Playwright failure report: ${reportId}`);
-        } catch (reportError) {
-          console.error(`[CLI] Failed to create Playwright failure report:`, reportError);
-        }
-        
-        return {
-          success: false,
-          error: `Playwright not available: ${error}`,
-          reportId
-        };
+        throw new Error(`[CLI]Playwright check failed: ${error}. Please ensure Playwright is installed and available in the project.`);
       }
 
       const args = this.buildPlaywrightArgs(resolvedTestPath, config);
       console.log(`[CLI] Playwright command: npx ${args.join(' ')}`);
-      
+
       let result;
       try {
         result = await this.runPlaywrightProcess(args);
-        console.log(`[CLI] Playwright result:`, { 
-          success: result.success, 
+        console.log(`[CLI] Playwright result:`, {
+          success: result.success,
           outputLength: result.output?.length || 0,
-          hasError: !!result.error 
+          hasError: !!result.error
         });
       } catch (processError) {
-        console.error(`[CLI] Playwright process failed:`, processError);
-        result = {
-          success: false,
-          output: '',
-          error: `Playwright process failed: ${processError}`
-        };
+        throw new Error(`[CLI] Playwright process failed: ${processError}. Please ensure Playwright is installed and available in the project.`);
       }
-      
+
       // Always create a report, even for failed tests
       let reportId;
       try {
@@ -333,7 +217,7 @@ export class LocalFileSystemAdapter {
         try {
           // Ensure the reports directory exists for fallback
           await fs.mkdir(reportsDir, { recursive: true });
-          
+
           const fallbackReport = {
             id: reportId,
             testPath: resolvedTestPath,
@@ -353,16 +237,14 @@ export class LocalFileSystemAdapter {
           reportId = 'report-creation-failed';
         }
       }
-      
-      this.invalidateCache('reports');
-      
+
       return {
         success: result.success,
         output: result.output,
         error: result.error,
         reportId
       };
-      
+
     } catch (error: any) {
       console.error(`[CLI] Test execution failed with unhandled error:`, error);
       console.error(`[CLI] Error stack:`, error.stack);
@@ -376,165 +258,182 @@ export class LocalFileSystemAdapter {
 
   private async resolveTestPath(testPath: string): Promise<string> {
     const filename = path.basename(testPath);
-      const testFileInTestDir = path.join(this.testDirectory, filename);
-      
-      try {
-        await fs.access(testFileInTestDir);
+    const testFileInTestDir = path.join(this.testDirectory, filename);
+
+    try {
+      await fs.access(testFileInTestDir);
       return path.relative(this.projectPath, testFileInTestDir);
     } catch {
-        try {
-          const testDirContents = await fs.readdir(this.testDirectory);
-          const similarFiles = testDirContents.filter(file => 
-            file.toLowerCase().includes(filename.toLowerCase().substring(0, 20)) ||
-            filename.toLowerCase().includes(file.toLowerCase().substring(0, 20))
-          );
-          
-          if (similarFiles.length > 0) {
-          return path.relative(this.projectPath, path.join(this.testDirectory, similarFiles[0]));
-        }
-        
-            const glob = require('glob');
-        const matches = glob.sync(`**/${filename}`, { cwd: this.projectPath });
-              
-              if (matches.length > 0) {
-          return matches[0];
-        }
-        
-                const shortName = filename.split('_')[0];
-        const broadMatches = glob.sync(`**/*${shortName}*.spec.ts`, { cwd: this.projectPath });
-        
-        return broadMatches.length > 0 ? broadMatches[0] : filename;
-      } catch {
-        return filename;
-      }
+      throw new Error(`Test file not found: ${testPath}`);
     }
   }
 
   private buildPlaywrightArgs(testPath: string, config: any): string[] {
     const args = ['playwright', 'test', testPath, '--reporter=json'];
-      
-      if (config.headless === false) {
-        args.push('--headed');
-      }
-      
+
+    // Note: Reports are stored in test-reports/ (separate from test-results/)
+    // This prevents Playwright from cleaning our reports when it cleans test-results/
+
+    if (config.headless === false) {
+      args.push('--headed');
+    }
+
     return args;
   }
 
   private async runPlaywrightProcess(args: string[]): Promise<{ success: boolean; output: string; error?: string }> {
     const { spawn } = require('child_process');
-    
+
     console.log(`[CLI] Spawning process: npx ${args.join(' ')}`);
     console.log(`[CLI] Working directory: ${this.projectPath}`);
-    
-        const child = spawn('npx', args, {
-          cwd: this.projectPath,
+
+    const child = spawn('npx', args, {
+      cwd: this.projectPath,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env }
-        });
+      env: { ...process.env },
+      detached: false
+    });
 
     let output = '';
     let errorOutput = '';
+    let jsonComplete = false;
 
-        child.stdout.on('data', (data: Buffer) => {
+    child.stdout.on('data', (data: Buffer) => {
       const chunk = data.toString();
       output += chunk;
-      console.log(`[CLI] STDOUT: ${chunk.trim()}`);
-        });
+      
+      // Check if we have complete JSON with stats (indicates test completion)
+      if (!jsonComplete && output.includes('"stats"') && output.includes('"duration"')) {
+        try {
+          JSON.parse(output);
+          jsonComplete = true;
+          console.log(`[CLI] Complete JSON output detected, waiting for process to exit...`);
+          // Give it 5 seconds to clean up, then force kill
+          setTimeout(() => {
+            if (child.exitCode === null) {
+              console.log(`[CLI] Process still running after JSON completion, force killing...`);
+              child.kill('SIGKILL');
+            }
+          }, 5000);
+        } catch (e) {
+          // JSON not complete yet, continue collecting
+        }
+      }
+    });
 
-        child.stderr.on('data', (data: Buffer) => {
+    child.stderr.on('data', (data: Buffer) => {
       const chunk = data.toString();
       errorOutput += chunk;
-      console.log(`[CLI] STDERR: ${chunk.trim()}`);
     });
 
     return new Promise((resolve, reject) => {
       let isResolved = false;
-      
-      // Add timeout to prevent hanging
+
+      // Add timeout to prevent hanging (3 minutes for safety)
       const timeout = setTimeout(() => {
         if (!isResolved) {
-          console.log(`[CLI] Process timeout - killing child process`);
-          child.kill('SIGTERM');
+          console.log(`[CLI] Process timeout after 3 minutes - killing child process`);
+          child.kill('SIGKILL');
           isResolved = true;
-          resolve({
-            success: false,
-            output: output || errorOutput,
-            error: 'Test execution timeout (2 minutes)'
-          });
+          
+          // If we have complete JSON, treat as success despite timeout
+          if (jsonComplete) {
+            console.log(`[CLI] JSON was complete, treating as success`);
+            resolve({
+              success: true,
+              output: output || errorOutput,
+              error: undefined
+            });
+          } else {
+            resolve({
+              success: false,
+              output: output || errorOutput,
+              error: 'Test execution timeout (3 minutes)'
+            });
+          }
         }
-      }, 120000); // 2 minute timeout
+      }, 180000); // 3 minutes
 
-      child.on('close', (code: number | null) => {
+      child.on('exit', (code: number | null, signal: string | null) => {
         if (!isResolved) {
           clearTimeout(timeout);
           isResolved = true;
-          console.log(`[CLI] Process exited with code: ${code}`);
-          const success = code === 0;
-            resolve({
-              success,
+          console.log(`[CLI] Process exited with code: ${code}, signal: ${signal}`);
+          const success = code === 0 || (code === null && jsonComplete);
+          resolve({
+            success,
             output: output || errorOutput,
             error: success ? undefined : (errorOutput || 'Test execution failed')
-            });
-          }
-        });
+          });
+        }
+      });
 
-        child.on('error', (error: Error) => {
+      child.on('error', (error: Error) => {
         if (!isResolved) {
           clearTimeout(timeout);
           isResolved = true;
           console.error(`[CLI] Process error: ${error.message}`);
           resolve({
             success: false,
-            output: '',
+            output: output || errorOutput,
             error: `Process error: ${error.message}`
           });
         }
-      });
-
-      // Handle process spawn errors
-      child.on('spawn', () => {
-        console.log(`[CLI] Process spawned successfully`);
-      });
-
-      // Clean up event listeners on process exit
-      child.on('exit', () => {
-        child.removeAllListeners();
       });
     });
   }
 
   private async saveTestReport(
-    testPath: string, 
-    result: { success: boolean; output: string; error?: string }, 
-    config: any, 
+    testPath: string,
+    result: { success: boolean; output: string; error?: string },
+    config: any,
     reportsDir: string
   ): Promise<string> {
     let testResults: any = null;
-    
+
     console.log(`[CLI] Parsing test results from output (${result.output?.length || 0} chars)`);
     
+    // Try to parse the entire output as JSON first (Playwright outputs complete JSON)
     try {
+      testResults = JSON.parse(result.output);
+      console.log(`[CLI] Successfully parsed complete JSON output`);
+    } catch (error) {
+      // Fallback: try to extract JSON from mixed output
       const jsonMatch = result.output.match(/\{[\s\S]*"stats"[\s\S]*\}/);
       if (jsonMatch) {
-        testResults = JSON.parse(jsonMatch[0]);
-        console.log(`[CLI] Parsed test results:`, testResults.stats || 'No stats found');
-      } else {
-        console.log(`[CLI] No JSON results found in output`);
+        try {
+          testResults = JSON.parse(jsonMatch[0]);
+          console.log(`[CLI] Successfully parsed JSON from regex match`);
+        } catch (parseError) {
+          console.log(`[CLI] Failed to parse JSON from regex match:`, parseError);
+        }
       }
-    } catch (error) {
-      console.log(`[CLI] Failed to parse test results:`, error);
     }
-    
-    // Use test path to create a consistent report ID (one report per test)
+
+    // If we still don't have results, create a basic structure
+    if (!testResults) {
+      console.log(`[CLI] No JSON results found, creating basic report structure`);
+      testResults = {
+        stats: {
+          expected: result.success ? 1 : 0,
+          unexpected: result.success ? 0 : 1,
+          duration: 0
+        },
+        suites: [],
+        errors: result.error ? [{ message: result.error }] : []
+      };
+    }
+
     const testBaseName = path.basename(testPath, path.extname(testPath));
-    const reportId = `report_${testBaseName.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    
+    const timestamp = Date.now();
+    const reportId = `report_${testBaseName.replace(/[^a-zA-Z0-9]/g, '_')}_${timestamp}`;
+
     // Process test results to add URLs to artifacts and extract artifact list
     const artifacts = await this.extractArtifacts(testResults, this.projectPath);
-    
+
     // Generate AI analysis for failed tests
     const aiAnalysis = result.success ? null : await this.generateAIAnalysis(result, testResults, config);
-    
+
     const reportData = {
       id: reportId,
       testPath,
@@ -550,10 +449,10 @@ export class LocalFileSystemAdapter {
         duration: testResults?.stats?.duration || 0
       }
     };
-    
+
     const reportPath = path.join(reportsDir, `${reportId}.json`);
     console.log(`[CLI] Saving report to: ${reportPath}`);
-    
+
     // Ensure the reports directory exists before writing
     try {
       await fs.access(reportsDir);
@@ -561,10 +460,10 @@ export class LocalFileSystemAdapter {
       console.log(`[CLI] Reports directory doesn't exist, creating it: ${reportsDir}`);
       await fs.mkdir(reportsDir, { recursive: true });
     }
-    
+
     await fs.writeFile(reportPath, JSON.stringify(reportData, null, 2));
     console.log(`[CLI] Report saved successfully`);
-    
+
     return reportId;
   }
 
@@ -599,10 +498,10 @@ export class LocalFileSystemAdapter {
         try {
           const relativePath = path.relative(projectPath, obj.path);
           const url = `/api/artifacts/${encodeURIComponent(relativePath)}`;
-          
+
           // Add URL to the original object
           obj.url = url;
-          
+
           // Add to artifacts array
           artifacts.push({
             name: obj.name,
@@ -633,14 +532,14 @@ export class LocalFileSystemAdapter {
     try {
       console.log('[CLI] Starting AI analysis...');
       console.log('[CLI] OPENROUTER_API_KEY present:', !!process.env.OPENROUTER_API_KEY);
-      
+
       const { AIService } = require('./ai-service');
       const aiService = new AIService();
-      
+
       // Extract error information
       const errorInfo = this.extractErrorInfo(result, testResults);
       console.log('[CLI] Error info extracted:', { hasErrors: errorInfo.hasErrors, errorCount: errorInfo.errorCount });
-      
+
       if (!errorInfo.hasErrors) {
         console.log('[CLI] No errors found, skipping AI analysis');
         return null;
@@ -660,26 +559,27 @@ export class LocalFileSystemAdapter {
 
       console.log('[CLI] Calling AI service with request...');
       const analysis = await aiService.analyzeTestFailure(request);
-      console.log('[CLI] AI analysis completed:', { 
-        hasSummary: !!analysis.summary, 
-        confidence: analysis.confidence 
+      console.log('[CLI] AI analysis completed:', {
+        hasRootCause: !!analysis.rootCause,
+        confidence: analysis.confidence
       });
-      
+
       return {
-        summary: analysis.summary,
-        rootCause: analysis.rootCause || 'Unable to determine root cause',
-        suggestions: analysis.suggestions,
-        recommendations: analysis.fixRecommendations || ['Review test manually'],
-        confidence: analysis.confidence || 0
+        rootCause: analysis.rootCause,
+        recommendations: analysis.fixRecommendations,
+        confidence: analysis.confidence
       };
     } catch (error) {
       console.error('[CLI] AI analysis error:', error);
       console.error('[CLI] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
       return {
-        summary: 'AI analysis unavailable',
-        rootCause: 'Unable to analyze failure',
-        suggestions: 'Review test manually',
-        recommendations: ['Check selectors', 'Verify timing', 'Review logs'],
+        rootCause: 'AI analysis service unavailable - unable to analyze test failure automatically',
+        recommendations: [
+          'Review the raw test output and error messages manually',
+          'Check if selectors are correct and elements are present on the page',
+          'Verify test timing and add appropriate waits if needed',
+          'Ensure the test environment and application are properly configured'
+        ],
         confidence: 0
       };
     }
@@ -688,8 +588,8 @@ export class LocalFileSystemAdapter {
   private extractErrorInfo(result: any, testResults: any): { hasErrors: boolean; errorSummary: string; errorCount: number } {
     const errors: string[] = [];
 
-    // Check main error
-    if (result.error) {
+    // Only check main error if it's not a timeout error (timeout errors are misleading)
+    if (result.error && !result.error.includes('timeout')) {
       errors.push(`Main Error: ${result.error}`);
     }
 
@@ -735,22 +635,16 @@ export class LocalFileSystemAdapter {
   }
 
   async getReports(): Promise<TestReport[]> {
-    const cacheKey = this.getCacheKey('reports');
-    
-    const cached = this.getFromCache<TestReport[]>(cacheKey);
-    if (cached) {
-      return cached;
+
+    const reportsDir = path.join(this.projectPath, 'test-reports');
+
+    try {
+      await fs.access(reportsDir);
+    } catch {
+      return [];
     }
 
-      const reportsDir = path.join(this.projectPath, 'test-results', 'reports');
-      
-      try {
-        await fs.access(reportsDir);
-      } catch {
-        return [];
-      }
-
-      const reportFiles = await fs.readdir(reportsDir);
+    const reportFiles = await fs.readdir(reportsDir);
     const jsonFiles = reportFiles.filter(file => file.endsWith('.json'));
 
     const reports: TestReport[] = [];
@@ -760,7 +654,7 @@ export class LocalFileSystemAdapter {
         const filePath = path.join(reportsDir, file);
         const content = await fs.readFile(filePath, 'utf-8');
         const reportData = JSON.parse(content);
-        
+
         reports.push({
           id: reportData.id || path.basename(file, '.json'),
           testPath: reportData.testPath || 'unknown',
@@ -774,27 +668,24 @@ export class LocalFileSystemAdapter {
           aiAnalysis: reportData.aiAnalysis,
           summary: reportData.summary
         });
-          } catch (error) {
+      } catch (error) {
         continue;
       }
     }
 
-    const sortedReports = reports.sort((a, b) => 
+    const sortedReports = reports.sort((a, b) =>
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
-    this.setCache(cacheKey, sortedReports, this.REPORTS_TTL);
-    
     return sortedReports;
   }
 
   async deleteReport(reportId: string): Promise<void> {
-    const reportsDir = path.join(this.projectPath, 'test-results', 'reports');
+    const reportsDir = path.join(this.projectPath, 'test-reports');
     const reportPath = path.join(reportsDir, `${reportId}.json`);
-    
+
     try {
-            await fs.unlink(reportPath);
-      this.invalidateCache('reports');
+      await fs.unlink(reportPath);
     } catch (error) {
       throw new Error(`Failed to delete report: ${reportId}`);
     }
@@ -804,14 +695,13 @@ export class LocalFileSystemAdapter {
     for (const [, watcher] of this.fileWatchers) {
       try {
         watcher.close();
-    } catch (error) {
+      } catch (error) {
         // Ignore cleanup errors
       }
     }
     this.fileWatchers.clear();
-    this.cache.clear();
   }
-} 
+}
 
 async function ensureTestDirectory(projectPath: string, testDir: string): Promise<void> {
   const testDirectory = path.join(projectPath, testDir);

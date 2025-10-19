@@ -12,10 +12,8 @@ export interface AIAnalysisRequest {
 }
 
 export interface AIAnalysisResponse {
-  summary: string;
-  suggestions: string;
-  rootCause?: string;
-  fixRecommendations?: string[];
+  rootCause: string;
+  fixRecommendations: string[];
   confidence: number;
 }
 
@@ -32,8 +30,12 @@ export class AIService {
     if (!this.apiKey) {
       console.warn('[AI Service] OPENROUTER_API_KEY not found. Skipping AI analysis.');
       return {
-        summary: 'AI analysis unavailable - API key not configured',
-        suggestions: 'Configure OPENROUTER_API_KEY environment variable to enable AI-powered test failure analysis',
+        rootCause: 'AI analysis unavailable - OPENROUTER_API_KEY environment variable not configured',
+        fixRecommendations: [
+          'Set OPENROUTER_API_KEY environment variable with your OpenRouter API key',
+          'Restart the Raiken CLI after setting the environment variable',
+          'Verify the API key is valid and has sufficient credits'
+        ],
         confidence: 0
       };
     }
@@ -81,8 +83,13 @@ export class AIService {
     } catch (error) {
       console.error('AI analysis failed:', error);
       return {
-        summary: 'AI analysis failed due to service error',
-        suggestions: 'Review the raw test output and error messages manually',
+        rootCause: 'AI analysis service encountered an error - unable to analyze test failure automatically',
+        fixRecommendations: [
+          'Review the raw test output and error messages manually',
+          'Check network connectivity and OpenRouter API status',
+          'Verify the OPENROUTER_API_KEY is valid and has sufficient credits',
+          'Try running the test again to see if the issue persists'
+        ],
         confidence: 0
       };
     }
@@ -123,21 +130,38 @@ ${request.detailedErrors.map(error => `- ${error.message}`).join('\n') || 'None 
 - Available Videos: ${request.videos?.length || 0}
 
 **Analysis Requirements:**
-1. Identify the PRIMARY failure reason from the raw output
-2. Determine if this is a test logic issue, environment issue, or configuration problem
-3. Look for specific error patterns (timeouts, element not found, network issues, etc.)
-4. Provide concrete, actionable solutions
+You are an expert Playwright test engineer. Analyze this test failure and provide:
+
+1. **Root Cause Analysis**: Identify the PRIMARY technical reason for failure
+   - Be specific about error types (timeout, selector, network, assertion, etc.)
+   - Include specific values (timeout durations, selectors, status codes, etc.)
+   - Distinguish between test logic issues, environment problems, or application bugs
+   - Reference specific line numbers or stack traces when available
+
+2. **Actionable Fix Recommendations**: Provide concrete, implementable solutions
+   - Order fixes by likelihood of success (most likely first)
+   - Include specific code changes, configuration updates, or debugging steps
+   - Provide alternative approaches if the primary fix might not work
+   - Include preventive measures to avoid similar issues
 
 **Response Format (JSON only):**
 {
-  "summary": "Clear, specific explanation of what failed and why",
-  "rootCause": "The underlying technical reason for the failure",
-  "suggestions": "Step-by-step instructions to fix this specific issue",
-  "fixRecommendations": ["Specific action 1", "Specific action 2", "Specific action 3"],
+  "rootCause": "Detailed technical explanation of what failed and why, including specific error details, selectors, timeouts, or other relevant technical information",
+  "fixRecommendations": [
+    "Most likely fix with specific implementation details",
+    "Alternative fix approach with code examples if applicable", 
+    "Additional debugging steps or configuration changes",
+    "Preventive measures or best practices to avoid this issue"
+  ],
   "confidence": 85
 }
 
-Focus on being specific rather than generic. If you see timeout errors, mention the specific timeout. If elements aren't found, mention the specific selectors. If there are network issues, mention the specific URLs or status codes.
+**Requirements:**
+- Be specific, not generic (mention exact selectors, timeouts, URLs, status codes)
+- Provide actionable fixes with implementation details
+- Order recommendations by likelihood of success
+- Include code examples in fixes when relevant
+- Focus on practical solutions a developer can immediately implement
 `;
   }
 
@@ -231,17 +255,29 @@ Focus on being specific rather than generic. If you see timeout errors, mention 
       // Try to parse as JSON first
       const parsed = JSON.parse(aiResponse);
       return {
-        summary: parsed.summary || 'AI analysis completed',
-        suggestions: parsed.suggestions || 'Review the test output for more details',
-        rootCause: parsed.rootCause,
-        fixRecommendations: parsed.fixRecommendations,
+        rootCause: parsed.rootCause || 'Unable to determine the root cause of the test failure',
+        fixRecommendations: Array.isArray(parsed.fixRecommendations) 
+          ? parsed.fixRecommendations 
+          : (typeof parsed.fixRecommendations === 'string' 
+              ? [parsed.fixRecommendations] 
+              : [
+                  'Review the test output and error messages manually',
+                  'Check if selectors are correct and elements are present',
+                  'Verify test timing and add appropriate waits if needed',
+                  'Ensure the application is in the expected state before running assertions'
+                ]),
         confidence: parsed.confidence || 50
       };
     } catch {
-      // If JSON parsing fails, treat as plain text
+      // If JSON parsing fails, provide fallback analysis
       return {
-        summary: 'AI analysis completed',
-        suggestions: aiResponse.slice(0, 500),
+        rootCause: 'Failed to parse AI analysis response - manual review required',
+        fixRecommendations: [
+          'Review the raw test output and error messages manually',
+          'Check for common issues like element selectors, timing, or network problems',
+          'Verify the test environment and application state',
+          'Consider adding debug logging or screenshots to identify the issue'
+        ],
         confidence: 30
       };
     }

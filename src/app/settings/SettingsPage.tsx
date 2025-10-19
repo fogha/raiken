@@ -6,11 +6,11 @@ import { ArrowLeft } from 'lucide-react';
 import { ConfigurationPanel } from '@/components/ConfigurationPanel';
 import { TestExecutionSettings } from '@/components/TestExecutionSettings';
 import { useConfigurationStore } from '@/store/configurationStore';
-import { useTestStore } from '@/store/testStore';
+import { useTestGeneration } from '@/hooks/useTestGeneration';
 
 export function SettingsPage() {
   const { reset } = useConfigurationStore();
-  const { resetExecutionConfig } = useTestStore();
+  const { resetExecutionConfig } = useTestGeneration();
 
   const handleResetAll = () => {
     reset();
