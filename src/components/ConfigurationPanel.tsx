@@ -42,7 +42,7 @@ export function ConfigurationPanel() {
               <Select 
                 value={config.execution.browserType}
                 onValueChange={(value: 'chromium' | 'firefox' | 'webkit') => 
-                  store.store.updateExecutionConfig({ browserType: value })}
+                  store.updateExecutionConfig({ browserType: value })}
               >
                 <SelectTrigger>
                   <SelectValue />

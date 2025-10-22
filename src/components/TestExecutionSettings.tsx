@@ -64,7 +64,7 @@ export function TestExecutionSettings() {
           <Button
             variant="outline"
             size="sm"
-            onClick={resetExecutionConfig}
+            onClick={() => resetExecutionConfig()}
             className="flex items-center gap-2"
           >
             <RotateCcw className="h-4 w-4" />

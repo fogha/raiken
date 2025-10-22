@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   Info
 } from 'lucide-react';
-import { unifiedBridge } from '@/lib/unified-bridge';
+import { unifiedBridgeService } from '@/lib/unified-bridge';
 import { localBridgeService } from '@/lib/local-bridge';
 
 interface DiagnosticResult {
@@ -30,11 +30,11 @@ interface DiagnosticResult {
 export function BridgeConnectionDiagnostics() {
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<DiagnosticResult[]>([]);
-  const [bridgeStatus, setBridgeStatus] = useState(unifiedBridge.getStatus());
+  const [bridgeStatus, setBridgeStatus] = useState(unifiedBridgeService.getStatus());
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setBridgeStatus(unifiedBridge.getStatus());
+      setBridgeStatus(unifiedBridgeService.getStatus());
     }, 2000);
 
     return () => clearInterval(interval);
@@ -247,7 +247,7 @@ export function BridgeConnectionDiagnostics() {
           
           <Button 
             variant="outline"
-            onClick={() => unifiedBridge.reconnect()}
+            onClick={() => unifiedBridgeService.reconnect()}
             className="flex items-center gap-2"
           >
             <RefreshCw className="h-4 w-4" />

@@ -134,9 +134,9 @@ class RelayBridgeService {
     this.stopPingTimer();
     
     // Reject all pending requests
-    for (const [id, pending] of this.pendingRequests) {
+    this.pendingRequests.forEach((pending, id) => {
       pending.reject(new Error('Connection lost'));
-    }
+    });
     this.pendingRequests.clear();
   }
 
@@ -217,9 +217,9 @@ class RelayBridgeService {
     this.connection = null;
     
     // Clear all pending requests
-    for (const [id, pending] of this.pendingRequests) {
+    this.pendingRequests.forEach((pending, id) => {
       pending.reject(new Error('Disconnected'));
-    }
+    });
     this.pendingRequests.clear();
   }
 }
