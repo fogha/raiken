@@ -23,51 +23,42 @@ export interface AIServiceConfig {
 // Temporary hard-coded catalogue (until live /models endpoint is wired)
 export const SUPPORTED_MODELS = [
   // Anthropic Claude Models (2025)
-  'anthropic/claude-4-sonnet',       
-  'anthropic/claude-4-opus',         // Claude 4 Sonnet - Most powerful (May 2025)
+  'anthropic/claude-4-turbo',        // Claude 4 Turbo - Latest (Jan 2025)
+  'anthropic/claude-4-sonnet',       // Claude 4 Sonnet - Most powerful
   'anthropic/claude-3.5-sonnet',     // Claude 3.5 Sonnet - Latest stable
   'anthropic/claude-3.5-haiku',      // Claude 3.5 Haiku - Fast and efficient
-  'anthropic/claude-3-opus',         // Claude 3 Opus
-  'anthropic/claude-3-sonnet',       // Claude 3 Sonnet
-  'anthropic/claude-3-haiku',        // Claude 3 Haiku
   
   // OpenAI GPT Models (2025)
-  'openai/gpt-5',                    // GPT-5 - Latest (Aug 2025, 400k tokens)
+  'openai/gpt-4-turbo',              // GPT-4 Turbo - Latest powerful
   'openai/gpt-4o',                   // GPT-4 Omni
   'openai/gpt-4o-mini',              // GPT-4o Mini - Fast and efficient
-  'openai/gpt-4-turbo',              // GPT-4 Turbo
-  'openai/gpt-4',                    // GPT-4
-  'openai/gpt-3.5-turbo',            // GPT-3.5 Turbo
   
   // Google Gemini Models (2025)
-  'google/gemini-2.5-pro',           // Gemini 2.5 Pro - Latest multimodal (Jun 2025)
+  'google/gemini-2.5-flash',         // Gemini 2.5 Flash - Latest multimodal (Dec 2024)
+  'google/gemini-2.5-pro',           // Gemini 2.5 Pro - Most capable (Dec 2024)
   'google/gemini-pro-1.5',           // Gemini Pro 1.5
   'google/gemini-flash-1.5',         // Gemini Flash 1.5 - Fast
-  'google/gemini-pro',               // Gemini Pro
   
   // Google Gemma Models (2025)
-  'google/gemma-3-27b',              // Gemma 3 27B - Advanced reasoning
+  'google/gemma-3-27b',              // Gemma 3 27B - Advanced reasoning (Dec 2024)
   'google/gemma-2-27b',              // Gemma 2 27B
-  'google/gemma-2-9b',               // Gemma 2 9B
+  'google/gemma-2-9b',               // Gemma 2 9B - Fast
   
   // Meta Llama Models (2025)
-  'meta-llama/llama-4-maverick',     // Llama 4 Maverick - Latest (Apr 2025)
-  'meta-llama/llama-4-scout',        // Llama 4 Scout - Efficient variant
-  'meta-llama/llama-3.1-405b-instruct', // Llama 3.1 405B
+  'meta-llama/llama-3.3-70b-instruct', // Llama 3.3 70B - Latest (Dec 2024)
+  'meta-llama/llama-3.1-405b-instruct', // Llama 3.1 405B - Most powerful
   'meta-llama/llama-3.1-70b-instruct',  // Llama 3.1 70B
-  'meta-llama/llama-3.1-8b-instruct',   // Llama 3.1 8B
+  'meta-llama/llama-3.1-8b-instruct',   // Llama 3.1 8B - Fast
   
   // xAI Grok Models (2025)
-  'x-ai/grok-4',                     // Grok 4 - Latest (Jul 2025)
-  'x-ai/grok-4-heavy',               // Grok 4 Heavy - Complex tasks
-  'x-ai/grok-3',                     // Grok 3
+  'x-ai/grok-3',                     // Grok 3 - Latest (Dec 2024)
   
   // DeepSeek Models (2025)
-  'deepseek/deepseek-r1-0528',       // DeepSeek R1 - Advanced reasoning (May 2025)
-  'deepseek/deepseek-coder-v2',      // DeepSeek Coder V2
+  'deepseek/deepseek-r1',            // DeepSeek R1 - Reasoning (Jan 2025)
+  'deepseek/deepseek-coder',         // DeepSeek Coder - Code generation
   
   // Mistral Models (2025)
-  'mistralai/mistral-large-2407',    // Mistral Large 2407 - Instruction optimized
+  'mistralai/mistral-large-2411',    // Mistral Large 2411 - Latest (Nov 2024)
   'mistralai/mistral-large',         // Mistral Large
   'mistralai/mistral-medium',        // Mistral Medium
   'mistralai/mistral-small',         // Mistral Small
@@ -75,19 +66,19 @@ export const SUPPORTED_MODELS = [
   'mistralai/mixtral-8x7b-instruct', // Mixtral 8x7B
   
   // Alibaba Qwen Models (2025)
-  'qwen/qwen-3-72b-instruct',        // Qwen 3 72B - Latest (2025)
+  'qwen/qwen-max',                   // Qwen Max - Latest (2025)
+  'qwen/qwen-2.5-72b-instruct',      // Qwen 2.5 72B - Latest (Dec 2024)
   'qwen/qwen-2.5-max',               // Qwen 2.5 Max - Math & coding
-  'qwen/qwen-2-72b-instruct',        // Qwen 2 72B
   
   // Cohere Models
   'cohere/command-r-plus',           // Command R+ - Latest
   'cohere/command-r',                // Command R
-  'cohere/command',                  // Command
   
   // Other Notable Models
   'perplexity/llama-3.1-sonar-large-128k-online', // Perplexity Sonar
   'databricks/dbrx-instruct',        // DBRX Instruct
   'microsoft/wizardlm-2-8x22b',      // WizardLM 2
+  'nousresearch/nous-hermes-2-mixtral-8x7b', // Nous Hermes 2
 ] as const;
 export type SupportedModel = (typeof SUPPORTED_MODELS)[number];
 
@@ -103,7 +94,7 @@ export class OpenRouterService {
    * @param configOrApiKey Configuration options or API key string
    */
   constructor(configOrApiKey: AIServiceConfig | string) {
-    const defaultModel = process.env.OPENROUTER_MODEL || 'anthropic/claude-4-sonnet';
+    const defaultModel = process.env.OPENROUTER_MODEL || 'anthropic/claude-4-turbo';
     if (typeof configOrApiKey === 'string') {
       this.config = {
         apiKey: configOrApiKey,

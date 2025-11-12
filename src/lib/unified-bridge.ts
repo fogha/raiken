@@ -34,12 +34,10 @@ class UnifiedBridgeService {
   private readonly BRIDGE_CACHE_TTL = 5000; // 5 seconds
 
   async getBridge(): Promise<BridgeRPC | null> {
-    // Return cached bridge if it's still valid
     if (this.cachedBridge && (Date.now() - this.lastBridgeCheck) < this.BRIDGE_CACHE_TTL) {
       return this.cachedBridge;
     }
 
-    // Only try local bridge if we don't already have a connection
     if (this.currentMode === 'none' || !localBridgeService.isConnected()) {
       const localBridge = await this.tryLocalBridge();
       if (localBridge) {
@@ -48,7 +46,6 @@ class UnifiedBridgeService {
         return localBridge;
       }
     } else if (this.currentMode === 'local' && localBridgeService.isConnected()) {
-      // Reuse existing local connection
       const localBridge = {
         mode: 'local' as const,
         rpc: this.createLocalRPC()

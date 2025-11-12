@@ -40,10 +40,9 @@ export function TestScriptEditor({
 }: TestScriptEditorProps) {
   const { theme } = useTheme();
   const [isFocused, setIsFocused] = useState(false);
-  const [isFormatting, setIsFormatting] = useState(false);
-  const [formatSuccess, setFormatSuccess] = useState<boolean | null>(null);
   const [editorMounted, setEditorMounted] = useState(false);
-  const editorRef = useRef<any>(null); // you can type this with Monaco types if desired
+  const editorRef = useRef<any>(null);
+  const editorTheme = theme === "dark" ? "vs-dark" : "light";
 
   // Stable editor options (prevents re-renders)
   const editorOptions = useMemo(
@@ -73,28 +72,6 @@ export function TestScriptEditor({
     }),
     []
   );
-
-  const formatWithPrettier = async (
-    code: string,
-    lang: "json" | "javascript" | "typescript"
-  ) => {
-    const prettier = await import("prettier/standalone");
-    const parserBabel = await import("prettier/plugins/babel");
-    const parserEstree = await import("prettier/plugins/estree");
-    const parserTS = await import("prettier/plugins/estree");
-
-    const parser =
-      lang === "json"
-        ? "json"
-        : lang === "typescript"
-        ? "typescript"
-        : "babel";
-
-    return prettier.format(code, {
-      parser,
-      plugins: [parserBabel, parserEstree, parserTS],
-    } as any);
-  };
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     setEditorMounted(true);
@@ -163,37 +140,19 @@ export function TestScriptEditor({
   return (
     <Card
       className={cn(
-        "p-4 space-y-4 w-full flex flex-col bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-slate-200/50 dark:border-slate-700/50 shadow-lg",
+        "p-4 space-y-4 w-full flex flex-col bg-white/80 dark:bg-slate-900 rounded-2xl backdrop-blur-sm border-slate-200/50 h-full dark:border-slate-700/50 shadow-lg",
         error &&
           "border-red-500/50 ring-2 ring-red-500/20 dark:border-red-400/50 dark:ring-red-400/20",
         isFocused && "ring-2 ring-blue-500/20 dark:ring-blue-400/20"
       )}
       aria-label="Test script editor"
     >
-      {!hideHeader && (
-        <div className="flex justify-between items-center pb-2">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md">
-              <Code className="h-4 w-4 text-white" />
-            </div>
-            <div className="flex items-center gap-2">
-              <Label className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                {language === "json" ? "Test Configuration" : "Test Script"}
-              </Label>
-              <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                ({language.toUpperCase()})
-              </span>
-            </div>
-          </div>  
-        </div>
-      )}
-
-      <div className="relative h-full rounded-lg overflow-hidden bg-white/40 dark:bg-slate-900/40 shadow-inner border border-slate-200/50 dark:border-slate-700/50 h-[360px] md:h-[480px]">
+      <div className="relative h-full rounded-lg overflow-hidden bg-white/40 dark:bg-slate-900/40 shadow-inner border border-slate-200/50  h-[360px] md:h-[480px]">
         <MonacoEditor
           width="100%"
           height="100%"
           language={language}
-          theme={theme === "dark" ? "vs-dark" : "vs-light"}
+          theme={editorTheme}
           value={value || ""}
           options={editorOptions}
           onChange={(v: string) => onChange(v)}

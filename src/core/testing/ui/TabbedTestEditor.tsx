@@ -59,7 +59,7 @@ export function TabbedTestEditor() {
   // Handle saving a test
   const handleSaveTest = async (tab: TestTab) => {
     setSavingTabs(prev => new Set(prev).add(tab.id));
-    
+
     try {
       // Try local bridge first if connected
       if (isConnected) {
@@ -75,7 +75,7 @@ export function TabbedTestEditor() {
           console.warn('⚠️ Local bridge save failed, falling back to Raiken API:', result.error);
         }
       }
-      
+
       // Fallback to Raiken API
       console.log('💾 Saving test via Raiken API...');
       const response = await fetch('/api/v1/tests', {
@@ -117,8 +117,8 @@ export function TabbedTestEditor() {
       .replace(/[^a-z0-9.-]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_|_$/g, '');
-    
-    return isConnected 
+
+    return isConnected
       ? `${safeFileName}.spec.ts`  // Use original name without tab ID
       : `generated-tests/${safeFileName}.spec.ts`; // Full path for Raiken execution
   };
@@ -190,23 +190,23 @@ export function TabbedTestEditor() {
     <div className="flex flex-col w-full h-full">
       {/* Permanent Save and Run buttons at the top */}
       <div className="flex items-center justify-between gap-2 py-2 bg-muted/30">
-        <div className="flex items-center gap-1">
-          <div className="flex items-center bg-muted rounded-md p-1">
+        <div className="flex items-center justify-between gap-3 flex-1 min-w-0 scrollbar-hide">
+          <div className="flex items-center overflow-x-auto bg-muted rounded-md py-1 px-2 flex-1 gap-1 scrollbar-hide">
             {editorTabs.map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors
-                  ${activeTabId === tab.id 
-                    ? 'bg-background text-foreground shadow-sm' 
+                  relative flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-sm transition-colors flex-shrink-0 min-w-max
+                  ${activeTabId === tab.id
+                    ? 'bg-background text-foreground shadow-sm whitespace-nowrap'
                     : 'text-muted-foreground hover:text-foreground hover:bg-muted-foreground/10'
                   }
                 `}
               >
-                {tab.name}
+                <span className='whitespace-nowrap'>{tab.name}</span>
                 <span
-                  className="ml-1 hover:bg-destructive/20 hover:text-destructive rounded-sm px-1 transition-colors"
+                  className="hover:bg-destructive/20 hover:text-destructive rounded-sm px-1 transition-colors flex-shrink-0"
                   onClick={(e) => {
                     e.stopPropagation();
                     removeEditorTab(tab.id);
@@ -216,56 +216,53 @@ export function TabbedTestEditor() {
                 </span>
               </button>
             ))}
-            
-            {/* + button right after the tabs */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleAddTab}
-              className="ml-2 h-8 w-8"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
           </div>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleAddTab}
+            className="h-9 w-9 flex-shrink-0 border-dashed hover:bg-blue-50 dark:hover:bg-blue-900/20"
+            title="New Test (Ctrl+N)"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
         </div>
         <div className="flex gap-2">
-        <Button
-          onClick={() => activeTab && handleSaveTest(activeTab)}
-          disabled={!activeTab || (activeTab && savingTabs.has(activeTab.id))}
-          variant="outline"
-          size="sm"
-        >
-          {activeTab && savingTabs.has(activeTab.id) ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Save className="h-4 w-4 mr-2" />
-          )}
-          Save
-        </Button>
-        <Button
-          onClick={() => activeTab && handleRunTest(activeTab)}
-          disabled={!activeTab || (activeTab && (savingTabs.has(activeTab.id) || isExecuting))}
-          size="sm"
-        >
-          {activeTab && isExecuting ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Play className="h-4 w-4 mr-2" />
-          )}
-          Run Test
-        </Button>
+          <Button
+            onClick={() => activeTab && handleSaveTest(activeTab)}
+            disabled={!activeTab || (activeTab && savingTabs.has(activeTab.id))}
+            size="sm"
+            className='border-none'
+          >
+            {activeTab && savingTabs.has(activeTab.id) ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+          </Button>
+          <Button
+            onClick={() => activeTab && handleRunTest(activeTab)}
+            disabled={!activeTab || (activeTab && (savingTabs.has(activeTab.id) || isExecuting))}
+            size="sm"
+          >
+            {activeTab && isExecuting ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+          </Button>
         </div>
       </div>
 
       {/* Tab content area */}
       <div className="flex flex-1 overflow-hidden">
         {editorTabs.map(tab => (
-          <div 
-            key={tab.id} 
+          <div
+            key={tab.id}
             style={{
               height: "77vh"
             }}
-            className={`min-h-[640px] flex-1 ${activeTabId === tab.id ? 'flex' : 'hidden'}`}
+            className={`min-h-[640px] rounded-lg flex-1 ${activeTabId === tab.id ? 'flex' : 'hidden'}`}
           >
             <TestScriptEditor
               value={tab.content}

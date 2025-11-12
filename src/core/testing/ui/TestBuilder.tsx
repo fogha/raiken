@@ -4,36 +4,38 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Loader2, Zap } from 'lucide-react';
+import { Loader2, Zap, MessageSquare, AlertTriangle } from 'lucide-react';
 import { DOMNode } from '@/types/dom';
+import { JsonTestSpec } from '@/types/test-generation';
 import { TestScriptEditor } from './TestScriptEditor';
 import { cn } from "@/lib/utils";
 import { useProjectStore } from '@/store/projectStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useEditorStore } from '@/store/editorStore';
+import { useLocalBridge } from '@/hooks/useLocalBridge';
 
 interface TestBuilderProps {
   selectedNode: DOMNode | null;
   url?: string;
   onTestGenerated?: (script: string) => void;
+  editorMode?: 'json' | 'chat';
 }
 
-export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerated }: TestBuilderProps) {
+export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerated, editorMode: propEditorMode = 'json' }: TestBuilderProps) {
   const router = useRouter();
   const { addNotification, removeNotification } = useNotificationStore();
   const { addEditorTab } = useEditorStore();
+  const { isConnected } = useLocalBridge();
 
-  // Local UI state
   const [validationError, setValidationError] = useState<string | null>(null);
   const [jsonTestScript, setJsonTestScript] = useState<string>('');
   const [loadingNotificationId, setLoadingNotificationId] = useState<string | null>(null);
-
-  // Helper functions (defined before mutation)
+  const editorMode = propEditorMode;
   const getTestNameFromScript = (script: string): string => {
     const timestamp = new Date().toLocaleTimeString().replace(/:/g, '-');
     
     try {
-      const testSpec = JSON.parse(script);
+      const testSpec: JsonTestSpec = JSON.parse(script);
       return testSpec.name || `Generated Test ${timestamp}`;
     } catch (e) {
       console.warn('[Raiken] Could not parse JSON test script for name:', e);
@@ -73,9 +75,8 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
         };
   };
 
-  // TanStack Query mutation for test generation
   const generateTestMutation = useMutation({
-    mutationFn: async (testSpec: any) => {
+    mutationFn: async (testSpec: JsonTestSpec) => {
       const domTree = useProjectStore.getState().domTree;
 
       const response = await fetch('/api/generate-test', {
@@ -91,18 +92,24 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
 
       const result = await response.json();
 
-      if (!response.ok || result.error) {
-        throw new Error(result.error || result.message || 'Failed to generate test');
+      if (!response.ok) {
+        const errorMessage = result.error?.message || result.error || 'Failed to generate test';
+        const errorCode = result.error?.code || 'GENERATION_ERROR';
+        
+        throw new Error(`[${errorCode}] ${errorMessage}`);
       }
       
-      if (!result.testScript) {
+      if (!result.success || !result.testScript) {
         throw new Error('No test script returned from server');
       }
 
-      return result.testScript;
+      return {
+        testScript: result.testScript,
+        requestId: result.requestId,
+        metadata: result.metadata
+      };
     },
     onMutate: () => {
-      // Show loading notification when mutation starts
       const notificationId = addNotification({
         type: 'info',
         title: 'Generating Test...',
@@ -112,32 +119,27 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
       });
       setLoadingNotificationId(notificationId);
     },
-    onSuccess: (generatedScript) => {
-      // Remove loading notification
+    onSuccess: (result) => {
       if (loadingNotificationId) {
         removeNotification(loadingNotificationId);
       }
 
-      // Get test name from spec
       const testName = getTestNameFromScript(jsonTestScript);
+      navigateToEditorWithTest(result.testScript, testName);
 
-      // Navigate to editor and create new tab
-      navigateToEditorWithTest(generatedScript, testName);
-
-      // Notify parent component if callback provided
       if (onTestGenerated) {
-        onTestGenerated(generatedScript);
+        onTestGenerated(result.testScript);
       }
-
-      // Show success notification
+      const generationTime = result.metadata?.generationTime ? `${result.metadata.generationTime}ms` : '';
+      const scriptSize = result.metadata?.scriptLength || 0;
+      
       addNotification({
         type: 'success',
         title: 'Test Generated Successfully',
-        message: 'Opening test in editor...'
+        message: `Opening test in editor... ${generationTime ? `Generated in ${generationTime}` : ''} (${scriptSize} chars)`
       });
     },
     onError: (error: Error) => {
-      // Remove loading notification
       if (loadingNotificationId) {
         removeNotification(loadingNotificationId);
       }
@@ -152,7 +154,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     },
   });
 
-  // Update URL in prompt when it changes - but only on first mount
   useEffect(() => {
     if (url && typeof url === 'string') {
       console.log('[Raiken] Setting initial JSON test script from URL');
@@ -160,7 +161,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     }
   }, [url, setJsonTestScript]); 
 
-  // Function to validate the JSON test script
   const validateTestScript = (script: string): boolean => {
     if (!script.trim()) {
       setValidationError('Test script cannot be empty');
@@ -170,13 +170,11 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     try {
       const parsed = JSON.parse(script);
 
-      // Only validate if the script is not empty
       if (Object.keys(parsed).length === 0) {
         setValidationError('Test script cannot be empty');
         return false;
       }
 
-      // Clear any previous validation errors if we have valid JSON
       setValidationError(null);
       return true;
     } catch (error) {
@@ -197,7 +195,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     }
   };
 
-  // Function to handle changes in the JSON test script editor
   const handleJsonTestScriptChange = (newScript: string) => {
     console.log('[Raiken] JSON test script updated');
     setJsonTestScript(newScript);
@@ -208,7 +205,6 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
   };
 
 
-  // Generate a test script using the JSON test script
   const handleSubmitTest = () => {
     // Validate the test script before generating
     if (!validateTestScript(jsonTestScript)) {
@@ -221,9 +217,9 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
     }
 
     // Parse the test spec
-    let testSpec;
+    let testSpec: JsonTestSpec;
     try {
-      testSpec = JSON.parse(jsonTestScript);
+      testSpec = JSON.parse(jsonTestScript) as JsonTestSpec;
     } catch (e) {
       addNotification({
         type: 'error',
@@ -237,41 +233,103 @@ export function TestBuilder({ selectedNode: propSelectedNode, url, onTestGenerat
   };
 
   return (
-    <div className="max-w-full overflow-x-hidden h-full flex flex-col">
-      {/* Test Script Editor */}
-      <div className="flex-1 flex flex-col gap-4 w-full min-h-0" >
-        <div className="flex-1 flex min-h-0" style={{ height: "80vh" }}>
-          <TestScriptEditor
-            value={jsonTestScript}
-            onChange={handleJsonTestScriptChange}
-            error={validationError !== null}
-          />
-        </div>
-
-        {/* Test Generation Controls - Fixed at bottom */}
-        <div className="flex gap-3 p-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-t border-slate-200/50 dark:border-slate-700/50 rounded-lg">
-          <Button
-            onClick={handleSubmitTest}
-            disabled={generateTestMutation.isPending || validationError !== null}
-            className={cn(
-              "flex-1 bg-gradient-to-r cursor-pointer from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white border-0 shadow-lg hover:shadow-xl transition-all h-12",
-              generateTestMutation.isPending && "cursor-not-allowed opacity-50"
-            )}
-          >
-            {generateTestMutation.isPending ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Generating...
-              </>
-            ) : (
-              <>
-                <Zap className="mr-2 h-5 w-5" />
-                Generate Test
-              </>
-            )}
-          </Button>
-        </div>
+    <div className="w-full h-full flex flex-col">
+      {/* Editor Mode Toggle - placed in parent header via export */}
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden py-4">
+          {!isConnected ? (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-xl bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm shadow-md hover:shadow-lg transition-shadow duration-300 items-center justify-center">
+              <div className="text-center space-y-3">
+                <div className="w-12 h-12 bg-amber-100 dark:bg-amber-900/30 rounded-xl flex items-center justify-center mx-auto">
+                  <AlertTriangle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Bridge Disconnected</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Start the bridge to generate tests</p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden rounded-xl bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm shadow-md hover:shadow-lg transition-shadow duration-300">
+              {editorMode === 'json' ? (
+                <TestScriptEditor
+                  value={jsonTestScript}
+                  onChange={handleJsonTestScriptChange}
+                  error={validationError !== null}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-slate-400 dark:text-slate-500">
+                  <div className="text-center">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm font-medium mb-1">Chat Interface</p>
+                    <p className="text-xs opacity-70">Coming soon...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
       </div>
+
+      {/* Test Generation Controls - Fixed at bottom */}
+      {editorMode === 'json' && (
+      <div className="flex gap-2 p-4 pb-4 flex-shrink-0">
+        <Button
+          onClick={handleSubmitTest}
+          disabled={generateTestMutation.isPending || validationError !== null || !isConnected}
+          className={cn(
+            "w-full bg-green-600 hover:bg-green-700 text-white border-0 shadow-md hover:shadow-lg transition-all h-9 text-sm",
+            (generateTestMutation.isPending || !isConnected) && "cursor-not-allowed opacity-50"
+          )}
+          size="sm"
+        >
+          {generateTestMutation.isPending ? (
+            <>
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              Generating...
+            </>
+          ) : !isConnected ? (
+            <>
+              <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+              Disconnected
+            </>
+          ) : (
+            <>
+              <Zap className="mr-1.5 h-3.5 w-3.5" />
+              Generate
+            </>
+          )}
+        </Button>
+      </div>
+      )}
+    </div>
+  );
+}
+
+export function TestBuilderHeader({ editorMode, onModeChange }: { editorMode: 'json' | 'chat'; onModeChange: (mode: 'json' | 'chat') => void }) {
+  return (
+    <div className="flex items-center bg-none gap-1.5 rounded-lg p-1">
+      <button
+        onClick={() => onModeChange('json')}
+        className={cn(
+          "px-3 py-1.5 text-xs font-semibold rounded transition-all duration-200 tracking-tight",
+          editorMode === 'json'
+            ? 'dark:bg-slate-800 shadow-sm'
+            : 'bg-none dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+        )}
+      >
+        JSON
+      </button>
+      <button
+        onClick={() => onModeChange('chat')}
+        className={cn(
+          "px-3 py-1.5 text-xs font-semibold rounded transition-all duration-200 flex items-center gap-1.5 tracking-tight",
+          editorMode === 'chat'
+            ? 'shadow-sm dark:bg-slate-800'
+            : 'bg-none dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
+        )}
+      >
+        <MessageSquare className="w-3.5 h-3.5" />
+        Chat
+      </button>
     </div>
   );
 }

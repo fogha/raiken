@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { OpenRouterService } from '@/core/testing/services/openrouter.service';
+import { JsonTestSpec } from '@/types/test-generation';
+import { logger, generateRequestId } from '@/lib/logger';
+import { ValidationError, createGenerationError } from '@/lib/errors';
+import { handleError, validateRequired } from '@/lib/error-handler';
 
 /**
  * Test Generation API
@@ -7,50 +11,92 @@ import { OpenRouterService } from '@/core/testing/services/openrouter.service';
  */
 
 export async function POST(request: NextRequest) {
+  const requestId = generateRequestId();
+  const component = 'GenerateTestAPI';
+  
   try {
-    const { testSpec, domTree, config } = await request.json();
+    logger.apiRequest(component, 'POST', '/api/generate-test', { requestId });
+    
+    const body = await request.json();
+    const { testSpec, domTree, config } = body;
 
-    // Validate required fields
-    if (!testSpec) {
-      return NextResponse.json(
-        { error: 'Test specification is required' },
-        { status: 400 }
-      );
-    }
+    validateRequired(testSpec, 'testSpec', { requestId });
+    
+    const typedTestSpec: JsonTestSpec = testSpec;
+    
+    logger.info(component, 'Processing test generation request', {
+      requestId,
+      testName: typedTestSpec.name,
+      hasSteps: Array.isArray(typedTestSpec.steps) && typedTestSpec.steps.length > 0,
+      hasDOM: Boolean(domTree),
+      hasConfig: Boolean(config)
+    });
 
-    // Check if OpenRouter API key is configured
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'AI service not configured. Please set OPENROUTER_API_KEY environment variable.' },
-        { status: 500 }
-      );
+      logger.error(component, 'OpenRouter API key not configured', undefined, { requestId });
+      throw new ValidationError('AI service not configured. Please set OPENROUTER_API_KEY environment variable.');
     }
 
-    // Initialize OpenRouter service
+    logger.debug(component, 'Initializing OpenRouter service', { requestId, model: 'anthropic/claude-3.5-sonnet' });
+    
     const openRouterService = new OpenRouterService({
       apiKey,
       model: 'anthropic/claude-3.5-sonnet',
     });
 
-    // Generate the test script
+    const generationInput = {
+      ...typedTestSpec,
+      domTree,
+      url: typedTestSpec.url || config?.url
+    };
+
+    logger.info(component, 'Starting test script generation', {
+      requestId,
+      inputSize: JSON.stringify(generationInput).length,
+      testName: typedTestSpec.name || 'unnamed'
+    });
+
+    const startTime = Date.now();
+    
     const testScript = await openRouterService.generateTestScript(
-      JSON.stringify({ ...testSpec, domTree, url: testSpec.url || config?.url })
+      JSON.stringify(generationInput)
     );
+
+    const duration = Date.now() - startTime;
+    
+    if (!testScript || testScript.trim().length === 0) {
+      throw createGenerationError('script_empty', 'OpenRouter returned empty test script');
+    }
+
+    logger.performance(component, 'Test generation', duration, {
+      requestId,
+      scriptLength: testScript.length,
+      testName: typedTestSpec.name
+    });
+
+    logger.apiResponse(component, 'POST', '/api/generate-test', 200, {
+      requestId,
+      scriptLength: testScript.length
+    });
 
     return NextResponse.json({
       success: true,
       testScript,
+      requestId,
+      metadata: {
+        generationTime: duration,
+        scriptLength: testScript.length
+      }
     });
+    
   } catch (error) {
-    console.error('Test generation error:', error);
-    
-    const errorMessage = error instanceof Error ? error.message : 'Failed to generate test';
-    
-    return NextResponse.json(
-      { error: errorMessage },
-      { status: 500 }
-    );
+    return handleError(error, {
+      requestId,
+      component,
+      operation: 'generateTest',
+      metadata: { endpoint: '/api/generate-test' }
+    });
   }
 }
 
