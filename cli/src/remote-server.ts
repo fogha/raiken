@@ -7,6 +7,28 @@ import { ProjectInfo } from './project-detector';
 import { LocalFileSystemAdapter } from './filesystem-adapter';
 import { RelayClient } from './relay-client';
 
+// Request body interfaces
+interface TestFileRequest {
+  content: string;
+  filename?: string;
+  name?: string;
+  tabId?: string;
+}
+
+interface DeleteTestRequest {
+  testPath: string;
+}
+
+interface ExecuteTestRequest {
+  testPath: string;
+  config?: {
+    browserType?: 'chromium' | 'firefox' | 'webkit';
+    headless?: boolean;
+    retries?: number;
+    timeout?: number;
+  };
+}
+
 interface RemoteServerOptions {
   port: number;
   projectPath: string;
@@ -205,7 +227,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     }
   });
 
-  app.post('/api/save-test', async (req: Request, res: Response) => {
+  app.post('/api/save-test', async (req: Request<{}, {}, TestFileRequest>, res: Response) => {
     try {
       // Handle both formats: {content, filename} and {name, content}
       const { content, filename, name, tabId } = req.body;
@@ -222,7 +244,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
     }
   });
 
-  app.delete('/api/delete-test', async (req: Request, res: Response) => {
+  app.delete('/api/delete-test', async (req: Request<{}, {}, DeleteTestRequest>, res: Response) => {
     try {
       const { testPath } = req.body;
       await fsAdapter.deleteTestFile(testPath);
@@ -233,7 +255,7 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
   });
 
   // Test execution endpoint
-  app.post('/api/execute-test', async (req: Request, res: Response) => {
+  app.post('/api/execute-test', async (req: Request<{}, {}, ExecuteTestRequest>, res: Response) => {
     let hasResponded = false;
     
     // Set a timeout to ensure we always respond
@@ -266,8 +288,6 @@ export async function startRemoteServer(options: RemoteServerOptions): Promise<v
       console.log(`[CLI] Project path: ${fsAdapter.projectPath}`);
       console.log(`[CLI] Test directory: ${fsAdapter.testDirectory}`);
       
-      // Execute test using the filesystem adapter
-      console.log(`[CLI] Starting test execution...`);
       const result = await fsAdapter.executeTest(testPath, config);
       console.log(`[CLI] Test execution completed with result:`, {
         success: result.success,

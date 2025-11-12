@@ -21,7 +21,7 @@ import { SUPPORTED_MODELS } from "@/core/testing/services/openrouter.service"
 
 export function ModelSelector() {
   const [open, setOpen] = React.useState(false)
-  const [selectedModel, setSelectedModel] = React.useState<string>("anthropic/claude-4-sonnet")
+  const [selectedModel, setSelectedModel] = React.useState<string>("anthropic/claude-4-turbo")
   
   // Load saved model from localStorage on initial render
   React.useEffect(() => {

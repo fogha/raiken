@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, UseMutationOptions } from '@tanstack/react-query';
 import { useLocalBridge } from './useLocalBridge';
 import { useProjectStore } from '@/store/projectStore';
+import { JsonTestSpec } from '@/types/test-generation';
 
 export interface TestExecutionConfig {
   browserType: 'chromium' | 'firefox' | 'webkit';
@@ -23,6 +24,28 @@ interface GeneratedTest {
   timestamp: string;
 }
 
+export interface TestGenerationResponse {
+  success: boolean;
+  testScript: string;
+  requestId: string;
+  metadata: {
+    generationTime: number;
+    scriptLength: number;
+  };
+}
+
+export interface TestGenerationError {
+  code: string;
+  message: string;
+  details?: Record<string, unknown>;
+  requestId?: string;
+}
+
+export interface TestGenerationInput {
+  testSpec: JsonTestSpec;
+  domTree?: unknown;
+}
+
 const defaultExecutionConfig: TestExecutionConfig = {
   browserType: 'chromium',
   headless: true,
@@ -38,7 +61,6 @@ const defaultExecutionConfig: TestExecutionConfig = {
   reporters: ['json', 'html']
 };
 
-// Local storage helpers
 const getExecutionConfig = (): TestExecutionConfig => {
   if (typeof window === 'undefined') return defaultExecutionConfig;
   
@@ -93,21 +115,18 @@ export function useTestGeneration() {
   const { isConnected, connection } = useLocalBridge();
   const queryClient = useQueryClient();
 
-  // Query for execution config
   const configQuery = useQuery({
     queryKey: ['executionConfig'],
     queryFn: () => getExecutionConfig(),
     staleTime: Infinity,
   });
 
-  // Query for generated tests
   const generatedTestsQuery = useQuery({
     queryKey: ['generatedTests'],
     queryFn: () => getGeneratedTests(),
     staleTime: Infinity,
   });
 
-  // Mutation to update config
   const updateConfigMutation = useMutation({
     mutationFn: async (updates: Partial<TestExecutionConfig>) => {
       const currentConfig = configQuery.data || defaultExecutionConfig;
@@ -120,7 +139,6 @@ export function useTestGeneration() {
     },
   });
 
-  // Mutation to reset config
   const resetConfigMutation = useMutation({
     mutationFn: async () => {
       saveExecutionConfig(defaultExecutionConfig);
@@ -131,13 +149,12 @@ export function useTestGeneration() {
     },
   });
 
-  // Mutation to generate test
-  const generateTestMutation = useMutation({
-    mutationFn: async (testSpec: any) => {
+  const generateTestMutation = useMutation<TestGenerationResponse, Error, JsonTestSpec>({
+    mutationKey: ['generateTest'],
+    
+    mutationFn: async (testSpec: JsonTestSpec): Promise<TestGenerationResponse> => {
       const domTree = useProjectStore.getState().domTree;
-      const config = configQuery.data || defaultExecutionConfig;
 
-      // Use Next.js API route for test generation (not the bridge)
       const response = await fetch('/api/generate-test', {
         method: 'POST',
         headers: {
@@ -146,28 +163,66 @@ export function useTestGeneration() {
         body: JSON.stringify({
           testSpec,
           domTree,
-          config,
         }),
       });
 
       const result = await response.json();
 
-      // Check for errors in the response
-      if (!response.ok || result.error) {
-        throw new Error(result.error || result.message || 'Failed to generate test');
+      if (!response.ok) {
+        const error = result.error;
+        const errorMessage = error?.message || error || 'Failed to generate test';
+        const errorCode = error?.code || 'GENERATION_ERROR';
+        const requestId = result.requestId || 'unknown';
+        
+        const structuredError = new Error(`${errorMessage}`);
+        structuredError.name = errorCode;
+        (structuredError as any).code = errorCode;
+        (structuredError as any).requestId = requestId;
+        (structuredError as any).details = error?.details;
+        
+        throw structuredError;
       }
       
-      if (!result.testScript) {
-        throw new Error('No test script returned from server');
+      if (!result.success || !result.testScript) {
+        throw new Error('Invalid response: No test script returned from server');
       }
 
-      return result.testScript;
+      return {
+        success: result.success,
+        testScript: result.testScript,
+        requestId: result.requestId || 'unknown',
+        metadata: result.metadata || { generationTime: 0, scriptLength: 0 }
+      };
     },
-    onSuccess: (testScript) => {
+
+    // Smart retry configuration
+    retry: (failureCount, error) => {
+      // Don't retry validation errors
+      if ((error as any).code === 'VALIDATION_ERROR') {
+        return false;
+      }
+      
+      // Don't retry config errors
+      if ((error as any).code === 'CONFIG_ERROR') {
+        return false;
+      }
+      
+      // Retry generation errors up to 2 times
+      if ((error as any).code === 'GENERATION_ERROR' && failureCount < 2) {
+        return true;
+      }
+      
+      // Retry network errors up to 3 times
+      return failureCount < 3;
+    },
+
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+
+    onSuccess: (result) => {
       const currentTests = generatedTestsQuery.data || [];
       const newTest: GeneratedTest = {
-        id: `test_${Date.now()}`,
-        content: testScript,
+        id: result.requestId || `test_${Date.now()}`,
+        content: result.testScript,
         timestamp: new Date().toISOString(),
       };
       const updatedTests = [newTest, ...currentTests];
@@ -176,7 +231,6 @@ export function useTestGeneration() {
     },
   });
 
-  // Mutation to save test
   const saveTestMutation = useMutation({
     mutationFn: async (testContent: string) => {
       if (!isConnected || !connection) {
@@ -204,12 +258,10 @@ export function useTestGeneration() {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate test files to show the new saved test
       queryClient.invalidateQueries({ queryKey: ['testFiles'] });
     },
   });
 
-  // Mutation to clear generated tests
   const clearGeneratedTestsMutation = useMutation({
     mutationFn: async () => {
       saveGeneratedTests([]);
@@ -221,20 +273,29 @@ export function useTestGeneration() {
   });
 
   return {
-    // Config
     executionConfig: configQuery.data || defaultExecutionConfig,
     updateExecutionConfig: updateConfigMutation.mutate,
     resetExecutionConfig: resetConfigMutation.mutate,
     
-    // Generated tests
     generatedTests: generatedTestsQuery.data || [],
     latestTest: generatedTestsQuery.data?.[0] || null,
     
-    // Actions
     generateTest: generateTestMutation.mutate,
     generateTestAsync: generateTestMutation.mutateAsync,
     isGenerating: generateTestMutation.isPending,
+    isIdle: generateTestMutation.isIdle,
+    isSuccess: generateTestMutation.isSuccess,
+    isError: generateTestMutation.isError,
     generationError: generateTestMutation.error,
+    
+    generationData: generateTestMutation.data,
+    generationTime: generateTestMutation.data?.metadata?.generationTime,
+    scriptLength: generateTestMutation.data?.metadata?.scriptLength,
+    requestId: generateTestMutation.data?.requestId,
+    
+    errorCode: (generateTestMutation.error as any)?.code,
+    errorRequestId: (generateTestMutation.error as any)?.requestId,
+    errorDetails: (generateTestMutation.error as any)?.details,
     
     saveTest: saveTestMutation.mutate,
     saveTestAsync: saveTestMutation.mutateAsync,
@@ -242,6 +303,115 @@ export function useTestGeneration() {
     saveError: saveTestMutation.error,
     
     clearGeneratedTests: clearGeneratedTestsMutation.mutate,
+    
+    resetGeneration: generateTestMutation.reset,
+  };
+}
+
+/**
+ * Advanced hook for test generation with custom options
+ * Provides the raw mutation with retry logic and error handling
+ */
+export function useTestGenerationMutation(
+  options?: UseMutationOptions<TestGenerationResponse, Error, JsonTestSpec>
+) {
+  return useMutation<TestGenerationResponse, Error, JsonTestSpec>({
+    mutationKey: ['generateTest'],
+    
+    mutationFn: async (testSpec: JsonTestSpec): Promise<TestGenerationResponse> => {
+      const domTree = useProjectStore.getState().domTree;
+
+      const response = await fetch('/api/generate-test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          testSpec,
+          domTree,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        const error = result.error;
+        const errorMessage = error?.message || error || 'Failed to generate test';
+        const errorCode = error?.code || 'GENERATION_ERROR';
+        const requestId = result.requestId || 'unknown';
+        
+        const structuredError = new Error(`${errorMessage}`);
+        structuredError.name = errorCode;
+        (structuredError as any).code = errorCode;
+        (structuredError as any).requestId = requestId;
+        (structuredError as any).details = error?.details;
+        
+        throw structuredError;
+      }
+      
+      if (!result.success || !result.testScript) {
+        throw new Error('Invalid response: No test script returned from server');
+      }
+
+      return {
+        success: result.success,
+        testScript: result.testScript,
+        requestId: result.requestId || 'unknown',
+        metadata: result.metadata || { generationTime: 0, scriptLength: 0 }
+      };
+    },
+
+    retry: (failureCount, error) => {
+      if ((error as any).code === 'VALIDATION_ERROR') {
+        return false;
+      }
+      
+      if ((error as any).code === 'CONFIG_ERROR') {
+        return false;
+      }
+      
+      if ((error as any).code === 'GENERATION_ERROR' && failureCount < 2) {
+        return true;
+      }
+      
+      return failureCount < 3;
+    },
+
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+
+    ...options,
+  });
+}
+
+/**
+ * Convenience hook that provides commonly used mutation states
+ * Lighter alternative to the full useTestGeneration hook
+ */
+export function useTestGenerationState() {
+  const mutation = useTestGenerationMutation();
+  
+  return {
+    generateTest: mutation.mutate,
+    generateTestAsync: mutation.mutateAsync,
+    
+    isGenerating: mutation.isPending,
+    isIdle: mutation.isIdle,
+    
+    isSuccess: mutation.isSuccess,
+    isError: mutation.isError,
+    
+    data: mutation.data,
+    error: mutation.error,
+    
+    reset: mutation.reset,
+    
+    generationTime: mutation.data?.metadata?.generationTime,
+    scriptLength: mutation.data?.metadata?.scriptLength,
+    requestId: mutation.data?.requestId,
+    
+    errorCode: (mutation.error as any)?.code,
+    errorRequestId: (mutation.error as any)?.requestId,
+    errorDetails: (mutation.error as any)?.details,
   };
 }
 

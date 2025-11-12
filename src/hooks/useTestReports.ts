@@ -35,20 +35,15 @@ export function useTestReports() {
     queryKey: ['testReports', connection?.url],
     queryFn: async () => {
       if (!isConnected) {
-        const response = await fetch('/api/v1/tests?action=reports');
-        if (!response.ok) {
-          throw new Error('Failed to fetch reports');
-        }
-        const result = await response.json();
-        return (result.reports || []) as TestReport[];
+        return [];
       }
 
       const result = await getReports();
       return (result.reports || []) as TestReport[];
     },
-    enabled: true, // Always enabled, will use appropriate endpoint
-    staleTime: 10 * 1000, // 10 seconds
-    refetchInterval: 30 * 1000, // Refetch every 30 seconds
+    enabled: isConnected,
+    staleTime: 10 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   const deleteReportMutation = useMutation({

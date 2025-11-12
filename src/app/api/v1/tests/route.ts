@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import * as testFileManager from '@/core/testing/services/testFileManager';
 import { TestSuiteManager } from '@/core/testing/services/testSuite';
 import { localBridgeService } from '@/lib/local-bridge';
+import { 
+  ExecuteTestParams, 
+  SaveTestParams, 
+  DeleteTestParams, 
+  DeleteReportParams 
+} from '@/types/test-generation';
+import { logger, generateRequestId } from '@/lib/logger';
+import { ValidationError, TestExecutionError, BridgeError, FileSystemError } from '@/lib/errors';
+import { handleError, validateRequired } from '@/lib/error-handler';
 
 /**
  * Tests API Handler
@@ -24,95 +33,111 @@ const testSuiteManager = new TestSuiteManager({
 });
 
 export async function POST(request: NextRequest) {
+  const requestId = generateRequestId();
+  const component = 'TestsAPI';
+  
   try {
+    logger.apiRequest(component, 'POST', '/api/v1/tests', { requestId });
+    
     const body = await request.json();
     const { action, ...params } = body;
 
+    validateRequired(action, 'action', { requestId });
+
+    logger.info(component, `Processing ${action} request`, { requestId, action });
+
     switch (action) {
       case 'execute':
-        return handleExecuteTest(params);
+        return await handleExecuteTest(params, requestId);
       case 'save':
-        return handleSaveTest(params);
+        return await handleSaveTest(params, requestId);
       case 'list':
-        return handleListTests(params);
+        return await handleListTests(params, requestId);
       case 'delete':
-        return handleDeleteTest(params);
+        return await handleDeleteTest(params, requestId);
       case 'get-reports':
-        return handleGetReports(params);
+        return await handleGetReports(params, requestId);
       case 'delete-report':
-        return handleDeleteReport(params);
+        return await handleDeleteReport(params, requestId);
       default:
-        return NextResponse.json(
-          { success: false, error: `Unknown action: ${action}` },
-          { status: 400 }
-        );
+        logger.warn(component, 'Unknown action requested', { requestId, action });
+        throw new ValidationError(`Unknown action: ${action}`, { action });
     }
   } catch (error) {
-    console.error('Tests API error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error, {
+      requestId,
+      component,
+      operation: 'routeRequest',
+      metadata: { endpoint: '/api/v1/tests', method: 'POST' }
+    });
   }
 }
 
 export async function GET(request: NextRequest) {
+  const requestId = generateRequestId();
+  const component = 'TestsAPI';
+
   try {
     const url = new URL(request.url);
-    const action = url.searchParams.get('action');
+    const action = url.searchParams.get('action') || 'list';
+
+    logger.apiRequest(component, 'GET', `/api/v1/tests?action=${action}`, { requestId });
 
     switch (action) {
       case 'list':
-        return handleListTests({});
+        return await handleListTests({}, requestId);
       case 'reports':
-        return handleGetReports({});
+        return await handleGetReports({}, requestId);
       default:
-        return handleListTests({});
+        return await handleListTests({}, requestId);
     }
   } catch (error) {
-    console.error('Tests API GET error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error, {
+      requestId,
+      component,
+      operation: 'getRequest',
+      metadata: { endpoint: '/api/v1/tests', method: 'GET' }
+    });
   }
 }
 
 export async function DELETE(request: NextRequest) {
+  const requestId = generateRequestId();
+  const component = 'TestsAPI';
+
   try {
     const url = new URL(request.url);
     const action = url.searchParams.get('action');
     const testPath = url.searchParams.get('path');
     const reportId = url.searchParams.get('id');
 
+    logger.apiRequest(component, 'DELETE', `/api/v1/tests?${url.searchParams}`, { requestId });
+
     if (action === 'delete-report') {
       if (!reportId) {
-        return NextResponse.json(
-          { success: false, error: 'Report ID is required' },
-          { status: 400 }
-        );
+        throw new ValidationError('Report ID is required');
       }
-      return handleDeleteReport({ id: reportId });
+      return await handleDeleteReport({ id: reportId }, requestId);
     } else {
       // Default: delete test
       if (!testPath) {
-        return NextResponse.json(
-          { success: false, error: 'Test path is required' },
-          { status: 400 }
-        );
+        throw new ValidationError('Test path is required');
       }
-      return handleDeleteTest({ testPath });
+      return await handleDeleteTest({ testPath }, requestId);
     }
   } catch (error) {
-    console.error('Tests API DELETE error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleError(error, {
+      requestId,
+      component,
+      operation: 'deleteRequest',
+      metadata: { endpoint: '/api/v1/tests', method: 'DELETE' }
+    });
   }
 }
 
-async function handleExecuteTest(params: any) {
+async function handleExecuteTest(params: ExecuteTestParams, requestId: string) {
+  const component = 'TestExecution';
+  
   const {
     testPath,
     browserType = 'chromium',
@@ -127,14 +152,20 @@ async function handleExecuteTest(params: any) {
     reporters = ['json', 'html']
   } = params;
 
-  if (!testPath) {
-    return NextResponse.json(
-      { success: false, error: 'Test path is required' },
-      { status: 400 }
-    );
-  }
+  validateRequired(testPath, 'testPath', { requestId });
 
   try {
+    logger.info(component, 'Starting test execution', {
+      requestId,
+      testPath,
+      browserType,
+      headless,
+      retries,
+      timeout
+    });
+
+    const startTime = Date.now();
+
     // Create a test suite with the user's configuration
     const suite = await testSuiteManager.createTestSuite({
       name: 'user-configured',
@@ -149,102 +180,154 @@ async function handleExecuteTest(params: any) {
         tracing: features.tracing !== false
       }
     });
+
+    logger.debug(component, 'Test suite created', { requestId, suiteId: suite.id });
     
     const result = await testSuiteManager.executeTest({
       testPath,
       suiteId: suite.id
     });
 
+    const duration = Date.now() - startTime;
+    
+    logger.performance(component, 'Test execution', duration, {
+      requestId,
+      testPath,
+      success: result.success,
+      suiteId: suite.id
+    });
+
     return NextResponse.json({
       success: true,
-      result
+      result,
+      requestId,
+      metadata: { executionTime: duration }
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    
+  } catch (error) {
+    logger.error(component, 'Test execution failed', error as Error, { requestId, testPath });
+    throw new TestExecutionError(`Test execution failed for ${testPath}`, { testPath, requestId });
   }
 }
 
-async function handleSaveTest(params: any) {
+async function handleSaveTest(params: SaveTestParams, requestId: string) {
+  const component = 'TestSave';
   const { content, filename, tabId } = params;
 
-  if (!content || !filename) {
-    return NextResponse.json(
-      { success: false, error: 'Content and filename are required' },
-      { status: 400 }
-    );
-  }
+  validateRequired(content, 'content', { requestId });
+  validateRequired(filename, 'filename', { requestId });
 
   try {
+    logger.info(component, 'Saving test file', {
+      requestId,
+      filename,
+      contentLength: content.length,
+      tabId
+    });
+
+    const startTime = Date.now();
     const result = await testFileManager.saveTestScript(filename, content, tabId);
-    return NextResponse.json({
-      success: true,
+    const duration = Date.now() - startTime;
+
+    logger.performance(component, 'Test file save', duration, {
+      requestId,
+      filename,
       filePath: result
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+
+    return NextResponse.json({
+      success: true,
+      filePath: result,
+      requestId,
+      metadata: { saveTime: duration }
+    });
+    
+  } catch (error) {
+    logger.error(component, 'Test file save failed', error as Error, { requestId, filename });
+    throw new FileSystemError(`Failed to save test file: ${filename}`, { filename, requestId });
   }
 }
 
-async function handleListTests(params: any) {
+async function handleListTests(params: Record<string, never>, requestId: string) {
+  const component = 'TestList';
+  
   try {
+    logger.info(component, 'Loading test files', { requestId });
+
     // Try to load via local CLI first, then fallback to server
-    let bridgeConnection = localBridgeService.getConnection();
+    const bridgeConnection = localBridgeService.getConnection();
 
     if (bridgeConnection && localBridgeService.isConnected()) {
-      console.log('[Raiken] 📁 Loading tests via local CLI...');
+      logger.debug(component, 'Attempting to load tests via local CLI', { requestId });
+      
       const result = await localBridgeService.getTestFiles();
       
       if (result.success && result.files && Array.isArray(result.files)) {
-        console.log(`[Raiken] ✅ Loaded ${result.files.length} tests from local project`);
+        logger.info(component, 'Tests loaded via local CLI', { 
+          requestId, 
+          count: result.files.length,
+          source: 'local-cli'
+        });
+        
         return NextResponse.json({
           success: true,
-          files: result.files
+          files: result.files,
+          source: 'local-cli',
+          requestId
         });
       } else {
-        console.warn('[Raiken] ⚠️ Local CLI load failed or returned invalid data, falling back to server:', result.error);
-        // Continue to fallback below
+        logger.warn(component, 'Local CLI load failed, falling back to server', { 
+          requestId, 
+          error: result.error 
+        });
       }
+    } else {
+      logger.debug(component, 'No bridge connection available, using server', { requestId });
     }
     
-    // Fallback: Load via hosted server (existing behavior)
-    console.log('[Raiken] 📁 Loading tests via hosted server...');
+    // Fallback: Load via hosted server
     const files = await testFileManager.listTestScripts();
+    
+    logger.info(component, 'Tests loaded via server', { 
+      requestId, 
+      count: files.length,
+      source: 'server'
+    });
+
     return NextResponse.json({
       success: true,
-      files
+      files,
+      source: 'server',
+      requestId
     });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    
+  } catch (error) {
+    logger.error(component, 'Failed to load test files', error as Error, { requestId });
+    throw new FileSystemError('Failed to load test files', { requestId });
   }
 }
 
-async function handleDeleteTest(params: any) {
+async function handleDeleteTest(params: DeleteTestParams, requestId: string) {
+  const component = 'TestDelete';
   const { testPath } = params;
 
-  if (!testPath) {
-    return NextResponse.json(
-      { success: false, error: 'Test path is required' },
-      { status: 400 }
-    );
-  }
+  validateRequired(testPath, 'testPath', { requestId });
 
   try {
+    logger.info(component, 'Deleting test file', { requestId, testPath });
+    
     await testFileManager.deleteTestScript(testPath);
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    
+    logger.info(component, 'Test file deleted successfully', { requestId, testPath });
+    
+    return NextResponse.json({ 
+      success: true,
+      requestId 
+    });
+    
+  } catch (error) {
+    logger.error(component, 'Test deletion failed', error as Error, { requestId, testPath });
+    throw new FileSystemError(`Failed to delete test: ${testPath}`, { testPath, requestId });
   }
 }
 
@@ -278,84 +361,132 @@ function extractTestNameFromPath(testPath: string): string {
   }
 }
 
-async function handleGetReports(params: any) {
+async function handleGetReports(params: Record<string, never>, requestId: string) {
+  const component = 'ReportsGet';
+  
   try {
+    logger.info(component, 'Loading test reports', { requestId });
+    
     let reports = [];
+    let source = '';
     
     // Check if we should use local bridge
     if (localBridgeService.isConnected()) {
-      console.log('[Raiken] 📊 Loading reports via local CLI...');
+      logger.debug(component, 'Attempting to load reports via local CLI', { requestId });
+      
       const bridgeResult = await localBridgeService.getReports();
       if (bridgeResult.success && bridgeResult.reports) {
         reports = bridgeResult.reports;
-        console.log(`[Raiken] ✅ Loaded ${reports.length} reports from local project`);
+        source = 'local-cli';
+        
+        logger.info(component, 'Reports loaded via local CLI', { 
+          requestId, 
+          count: reports.length,
+          source
+        });
       } else {
-        console.warn('[Raiken] ⚠️ Local CLI reports load failed:', bridgeResult.error);
+        logger.warn(component, 'Local CLI reports load failed', { 
+          requestId, 
+          error: bridgeResult.error 
+        });
       }
-    } else {
+    }
+    
+    if (reports.length === 0) {
       // Fallback to Raiken's reports
+      logger.debug(component, 'Loading reports via server', { requestId });
+      
       const { testReportsService } = await import('@/core/testing/services/reports.service');
       reports = await testReportsService.getReports();
-      console.log(`[Raiken] 📊 Loaded ${reports.length} reports from Raiken server`);
+      source = 'server';
+      
+      logger.info(component, 'Reports loaded via server', { 
+        requestId, 
+        count: reports.length,
+        source
+      });
     }
     
     return NextResponse.json({
       success: true,
-      reports
+      reports,
+      source,
+      requestId,
+      metadata: { count: reports.length }
     });
-  } catch (error: any) {
-    console.error('Failed to get reports:', error);
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+    
+  } catch (error) {
+    logger.error(component, 'Failed to get reports', error as Error, { requestId });
+    throw new BridgeError('Failed to load test reports', { requestId });
   }
 }
 
-async function handleDeleteReport(params: any) {
+async function handleDeleteReport(params: DeleteReportParams, requestId: string) {
+  const component = 'ReportsDelete';
   const { id } = params;
 
-  if (!id) {
-    return NextResponse.json(
-      { success: false, error: 'Report ID is required' },
-      { status: 400 }
-    );
-  }
+  validateRequired(id, 'id', { requestId });
 
   try {
+    logger.info(component, 'Deleting test report', { requestId, reportId: id });
+
     // Check if we should use local bridge
     if (localBridgeService.isConnected()) {
-      console.log(`[Raiken] 🗑️ Deleting report via local CLI: ${id}`);
+      logger.debug(component, 'Deleting report via local CLI', { requestId, reportId: id });
+      
       const bridgeResult = await localBridgeService.deleteReport(id);
       if (bridgeResult.success) {
-        console.log(`[Raiken] ✅ Report deleted from local project: ${id}`);
-        return NextResponse.json({ success: true });
+        logger.info(component, 'Report deleted via local CLI', { requestId, reportId: id });
+        
+        return NextResponse.json({ 
+          success: true,
+          source: 'local-cli',
+          requestId 
+        });
       } else {
-        console.warn('[Raiken] ⚠️ Local CLI report deletion failed:', bridgeResult.error);
-        return NextResponse.json(
-          { success: false, error: bridgeResult.error || 'Failed to delete report' },
-          { status: 500 }
-        );
+        logger.error(component, 'Local CLI report deletion failed', undefined, { 
+          requestId, 
+          reportId: id, 
+          error: bridgeResult.error 
+        });
+        
+        throw new BridgeError(`Failed to delete report via CLI: ${bridgeResult.error}`, { 
+          reportId: id, 
+          requestId 
+        });
       }
     } else {
       // Fallback to Raiken's reports
+      logger.debug(component, 'Deleting report via server', { requestId, reportId: id });
+      
       const { testReportsService } = await import('@/core/testing/services/reports.service');
       const success = await testReportsService.deleteReport(id);
       
       if (success) {
-        console.log(`[Raiken] 🗑️ Report deleted from Raiken server: ${id}`);
-        return NextResponse.json({ success: true });
+        logger.info(component, 'Report deleted via server', { requestId, reportId: id });
+        
+        return NextResponse.json({ 
+          success: true,
+          source: 'server',
+          requestId 
+        });
       } else {
-        return NextResponse.json(
-          { success: false, error: 'Report not found or cannot be deleted' },
-          { status: 404 }
-        );
+        logger.warn(component, 'Report not found for deletion', { requestId, reportId: id });
+        
+        throw new ValidationError('Report not found or cannot be deleted', { 
+          reportId: id, 
+          requestId 
+        });
       }
     }
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
-    );
+  } catch (error) {
+    logger.error(component, 'Report deletion failed', error as Error, { requestId, reportId: id });
+    
+    if (error instanceof BridgeError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new BridgeError(`Failed to delete report: ${id}`, { reportId: id, requestId });
   }
 }
+

@@ -20,6 +20,7 @@ class RelayBridgeService {
   private readonly RELAY_URL = process.env.NEXT_PUBLIC_RELAY_URL || 'ws://84.46.245.248:3001/bridge';
   private readonly PING_INTERVAL = 30000;
   private readonly TIMEOUT_MS = 10000; // Increased to 10s for WebSocket
+  private readonly ENABLE_RELAY = process.env.NEXT_PUBLIC_ENABLE_RELAY_BRIDGE === 'true';
   private pingTimer: NodeJS.Timeout | null = null;
   private pendingRequests = new Map<string, { resolve: (result: any) => void; reject: (error: any) => void }>();
 
@@ -39,6 +40,11 @@ class RelayBridgeService {
   }
 
   async connect(): Promise<boolean> {
+    if (!this.ENABLE_RELAY) {
+      console.log('[Raiken Bridge] Relay bridge is disabled (NEXT_PUBLIC_ENABLE_RELAY_BRIDGE not set)');
+      return false;
+    }
+
     if (this.connection?.connected) {
       return true;
     }
@@ -216,8 +222,11 @@ class RelayBridgeService {
     
     this.connection = null;
     
-    // Clear all pending requests
-    this.pendingRequests.forEach((pending, id) => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('raiken_relay_session');
+    }
+    
+    this.pendingRequests.forEach((pending) => {
       pending.reject(new Error('Disconnected'));
     });
     this.pendingRequests.clear();

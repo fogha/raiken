@@ -409,7 +409,7 @@ export function TestReports() {
   const failedTests = reports.filter(r => !r.success).length;
 
   return (
-    <div className="p-6 space-y-6 bg-gradient-to-br from-slate-50/50 to-white/50 dark:from-slate-900/50 dark:to-slate-800/50 min-h-[77vh] h-full overflow-auto">
+    <div className="p-6 space-y-6 min-h-[77vh] h-full overflow-auto">
       <div className="flex items-center justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
@@ -445,25 +445,30 @@ export function TestReports() {
 
         <Button
           onClick={fetchReports}
-          disabled={isLoading}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white border-0 shadow-lg hover:shadow-xl transition-all"
+          disabled={isLoading || !isConnected}
+          className="bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-lg hover:shadow-xl transition-all"
         >
           <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
       </div>
 
-      {/* Connection Status */}
+      {/* No Connection State */}
       {!isConnected && (
-        <Card className="border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/10 dark:to-yellow-900/10 dark:border-amber-800/50">
-          <CardContent className="pt-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-amber-100 dark:bg-amber-900/30 rounded-lg flex items-center justify-center">
-                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+        <Card className="border-0 bg-white dark:bg-slate-900 shadow-lg">
+          <CardContent className="pt-6">
+            <div className="text-center py-12 space-y-4">
+              <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-8 h-8 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">No Project Connected</p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">Connect to your project to view test reports and artifacts.</p>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2">No Project Connected</h3>
+                <p className="text-slate-600 dark:text-slate-400 max-w-md mx-auto">
+                  Start the Raiken bridge server in your project directory to connect and view test reports.
+                </p>
+                <p className="text-sm text-slate-500 dark:text-slate-500 mt-3 font-mono">
+                  raiken remote
+                </p>
               </div>
             </div>
           </CardContent>
@@ -471,11 +476,11 @@ export function TestReports() {
       )}
 
       {/* Error State */}
-      {error && (
-        <Card className="border-red-200 bg-gradient-to-r from-red-50 to-pink-50 dark:from-red-900/10 dark:to-pink-900/10 dark:border-red-800/50">
+      {isConnected && error && (
+        <Card className="border-0 bg-red-50 dark:bg-red-900/20 shadow-lg">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-red-100 dark:bg-red-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
                 <Zap className="w-4 h-4 text-red-600 dark:text-red-400" />
               </div>
               <div>
@@ -488,7 +493,7 @@ export function TestReports() {
       )}
 
       {/* Loading State */}
-      {isLoading && (
+      {isConnected && isLoading && (
         <div className="flex items-center justify-center py-12">
           <div className="text-center space-y-4">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto">
@@ -503,7 +508,7 @@ export function TestReports() {
       )}
 
       {/* Empty State */}
-      {!isLoading && reports.length === 0 && !error && (
+      {isConnected && !isLoading && reports.length === 0 && !error && (
         <Card className="border-slate-200 dark:border-slate-700">
           <CardContent className="pt-6">
             <div className="text-center py-12 space-y-4">
